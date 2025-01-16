@@ -1,6 +1,6 @@
-# `ctx-gather`
+# `ctxg`
 
-Below is a step-by-step outline for implementing a `ctx-gather` Rust CLI tool that meets your specifications. It’s designed to do the following:
+Below is a step-by-step outline for implementing a `ctxg` Rust CLI tool that meets your specifications. It’s designed to do the following:
 
 1. **Accept file paths (and glob patterns) on the command line.**  
 2. **Optionally open a TUI** for interactive file selection when a flag (e.g., `-i` or `--interactive`) is used.  
@@ -17,7 +17,7 @@ Below, I’ll describe an example architecture, key dependencies, and pseudo-cod
 A recommended project layout:
 
 ```
-ctx-gather/
+ctxg/
 ├─ Cargo.toml
 └─ src/
    ├─ main.rs
@@ -36,7 +36,7 @@ In your `Cargo.toml`, include:
 
 ```toml
 [package]
-name = "ctx-gather"
+name = "ctxg"
 version = "0.1.0"
 edition = "2024"
 
@@ -60,7 +60,7 @@ Use whichever CLI parser you prefer (e.g., [`clap`](https://github.com/clap-rs/c
 use clap::{Parser, Arg};
 
 #[derive(Parser, Debug)]
-#[command(name = "ctx-gather")]
+#[command(name = "ctxg")]
 #[command(about = "Gather text file contents, group them by folder, output as XML to clipboard, then show token count.")]
 pub struct Cli {
     /// File paths (supporting globs)
@@ -309,7 +309,7 @@ pub fn build_xml(files: &[FileContents]) -> String {
     }
 
     // Wrap everything in a top-level XML-ish tag for clarity
-    format!("<ctx-gather>\n{}\n</ctx-gather>", output)
+    format!("<ctxg>\n{}\n</ctxg>", output)
 }
 
 /// Escape special characters if needed (optional)
