@@ -10,3 +10,5 @@ crossterm = "0.28.1"
 glob = "0.3.2"
 tiktoken-rs = "0.6.0"
 walkdir = "2.5.0"
+clap = { version = "4.4.6", features = ["derive"] }
+tui = "0.19.0"
