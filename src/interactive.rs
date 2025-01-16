@@ -192,11 +192,10 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
                     }
                 }
 
-                // Ctrl-I => invert selection for all items
+                // Ctrl-I => invert selection for VISIBLE (filtered) items
                 (KeyCode::Char('i'), KeyModifiers::CONTROL) => {
-                    // Invert selection for all items, not just filtered ones
-                    for (_, checked) in items.iter_mut() {
-                        *checked = !*checked;
+                    for (idx, _, _) in &filtered {
+                        items[*idx].1 = !items[*idx].1;
                     }
                 }
                 (KeyCode::Backspace, _) => {
