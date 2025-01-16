@@ -44,9 +44,12 @@ use tui::{
     },
 };
 
-pub fn select_files_tui(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
-    // Convert paths into a local data structure
-    let mut items: Vec<(PathBuf, bool)> = paths.into_iter().map(|p| (p, false)).collect();
+pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<Vec<PathBuf>> {
+    // Mark items as checked if they're in `preselected`
+    let mut items: Vec<(PathBuf, bool)> = paths.into_iter().map(|p| {
+        let is_checked = preselected.contains(&p);
+        (p, is_checked)
+    }).collect();
 
     // State for fuzzy search input
     let mut search_input = String::new();
@@ -58,12 +61,8 @@ pub fn select_files_tui(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
             .iter()
             .enumerate()
             .filter_map(|(idx, (p, checked))| {
-                let filename = p
-                    .file_name()
-                    .map(|s| s.to_string_lossy().to_string())
-                    .unwrap_or_default()
-                    .to_lowercase();
-                if filename.contains(&search_lower) {
+                let path_str = p.to_string_lossy().to_lowercase();
+                if path_str.contains(&search_lower) {
                     Some((idx, p.clone(), *checked))
                 } else {
                     None
@@ -115,11 +114,7 @@ pub fn select_files_tui(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
                 .enumerate()
                 .map(|(i, (_idx_p, path, checked))| {
                     let mark = if *checked { "[x]" } else { "[ ]" };
-                    let filename = path
-                        .file_name()
-                        .map(|s| s.to_string_lossy().to_string())
-                        .unwrap_or_else(|| "unknown".to_string());
-                    let line = format!("{} {}", mark, filename);
+                    let line = format!("{} {}", mark, path.display());
                     if i == selected_idx {
                         // highlight selected
                         ListItem::new(Spans::from(vec![Span::styled(
