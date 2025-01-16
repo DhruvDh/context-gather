@@ -1,5 +1,8 @@
 use anyhow::Result;
-use copypasta::{ClipboardContext, ClipboardProvider};
+use copypasta::{
+    ClipboardContext,
+    ClipboardProvider,
+};
 
 pub fn copy_to_clipboard(text: &str) -> Result<()> {
     let mut ctx = ClipboardContext::new()

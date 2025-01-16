@@ -1,17 +1,27 @@
-use anyhow::{Result, anyhow};
-use glob::glob;
 use std::{
     fs,
-    io::{Read, BufReader},
-    path::{Path, PathBuf},
+    io::{
+        BufReader,
+        Read,
+    },
+    path::{
+        Path,
+        PathBuf,
+    },
 };
+
+use anyhow::{
+    Result,
+    anyhow,
+};
+use glob::glob;
 use ignore::WalkBuilder;
 use tiktoken_rs::o200k_base;
 
 #[derive(Debug)]
 pub struct FileContents {
-    pub folder: PathBuf,
-    pub path: PathBuf,
+    pub folder:   PathBuf,
+    pub path:     PathBuf,
     pub contents: String,
 }
 
@@ -20,8 +30,8 @@ pub fn expand_paths(paths: Vec<String>) -> Result<Vec<PathBuf>> {
 
     for p in paths {
         // Attempt to treat it like a glob first
-        let pattern_results = glob(&p)
-            .map_err(|e| anyhow!("Invalid glob pattern {}: {:?}", p, e))?;
+        let pattern_results =
+            glob(&p).map_err(|e| anyhow!("Invalid glob pattern {}: {:?}", p, e))?;
 
         // If no matches, consider it a normal path
         let mut has_match = false;
@@ -46,7 +56,7 @@ pub fn gather_all_file_paths(paths: &[PathBuf]) -> Result<Vec<PathBuf>> {
     for path in paths {
         // Recursively gather files with `.gitignore` support
         let walker = WalkBuilder::new(path)
-            .follow_links(false)  // Adjust if you want to follow symlinks
+            .follow_links(false) // Adjust if you want to follow symlinks
             .standard_filters(true) // Respects .gitignore, hidden files, etc.
             .build();
 
@@ -100,12 +110,13 @@ fn read_file(path: &Path) -> Result<FileContents> {
     let file = fs::File::open(path)?;
     let mut reader = BufReader::new(file);
     let mut content = String::new();
-    reader.read_to_string(&mut content)
+    reader
+        .read_to_string(&mut content)
         .map_err(|_| anyhow!("Warning: {:?} is not a valid text file. Skipping.", path))?;
 
     Ok(FileContents {
-        folder: path.parent().unwrap_or_else(|| Path::new("")).to_path_buf(),
-        path: path.to_path_buf(),
+        folder:   path.parent().unwrap_or_else(|| Path::new("")).to_path_buf(),
+        path:     path.to_path_buf(),
         contents: content,
     })
 }

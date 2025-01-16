@@ -1,12 +1,12 @@
 mod cli;
-mod interactive;
-mod gather;
-mod xml_output;
 mod clipboard;
+mod gather;
+mod interactive;
+mod xml_output;
 
-use cli::Cli;
-use clap::Parser;
 use anyhow::Result;
+use clap::Parser;
+use cli::Cli;
 
 fn main() -> Result<()> {
     let cli = Cli::parse();

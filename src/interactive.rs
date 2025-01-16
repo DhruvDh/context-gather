@@ -1,17 +1,47 @@
 use std::path::PathBuf;
+
 use anyhow::Result;
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyModifiers},
+    event::{
+        self,
+        DisableMouseCapture,
+        EnableMouseCapture,
+        Event,
+        KeyCode,
+        KeyEvent,
+        KeyModifiers,
+    },
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{
+        EnterAlternateScreen,
+        LeaveAlternateScreen,
+        disable_raw_mode,
+        enable_raw_mode,
+    },
 };
 use tui::{
-    backend::CrosstermBackend,
-    layout::{Constraint, Direction, Layout},
-    style::{Color, Style},
-    text::{Span, Spans},
-    widgets::{Block, Borders, List, ListItem, Paragraph},
     Terminal,
+    backend::CrosstermBackend,
+    layout::{
+        Constraint,
+        Direction,
+        Layout,
+    },
+    style::{
+        Color,
+        Style,
+    },
+    text::{
+        Span,
+        Spans,
+    },
+    widgets::{
+        Block,
+        Borders,
+        List,
+        ListItem,
+        Paragraph,
+    },
 };
 
 pub fn select_files_tui(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
@@ -24,10 +54,12 @@ pub fn select_files_tui(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
     // Helper closure for filtering items
     let filter_items = |items: &[(PathBuf, bool)], search: &str| {
         let search_lower = search.to_lowercase();
-        items.iter()
+        items
+            .iter()
             .enumerate()
             .filter_map(|(idx, (p, checked))| {
-                let filename = p.file_name()
+                let filename = p
+                    .file_name()
                     .map(|s| s.to_string_lossy().to_string())
                     .unwrap_or_default()
                     .to_lowercase();
@@ -67,7 +99,7 @@ pub fn select_files_tui(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
-                    Constraint::Length(3),  // for search input
+                    Constraint::Length(3), // for search input
                     Constraint::Min(1),    // for file list
                 ])
                 .split(size);
@@ -78,27 +110,40 @@ pub fn select_files_tui(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
             f.render_widget(search_bar, chunks[0]);
 
             // Build list items
-            let list_items: Vec<ListItem> = filtered.iter().enumerate().map(|(i, (_idx_p, path, checked))| {
-                let mark = if *checked { "[x]" } else { "[ ]" };
-                let filename = path.file_name()
-                    .map(|s| s.to_string_lossy().to_string())
-                    .unwrap_or_else(|| "unknown".to_string());
-                let line = format!("{} {}", mark, filename);
-                if i == selected_idx {
-                    // highlight selected
-                    ListItem::new(Spans::from(vec![Span::styled(line, Style::default().fg(Color::Yellow))]))
-                } else {
-                    ListItem::new(Spans::from(line))
-                }
-            }).collect();
+            let list_items: Vec<ListItem> = filtered
+                .iter()
+                .enumerate()
+                .map(|(i, (_idx_p, path, checked))| {
+                    let mark = if *checked { "[x]" } else { "[ ]" };
+                    let filename = path
+                        .file_name()
+                        .map(|s| s.to_string_lossy().to_string())
+                        .unwrap_or_else(|| "unknown".to_string());
+                    let line = format!("{} {}", mark, filename);
+                    if i == selected_idx {
+                        // highlight selected
+                        ListItem::new(Spans::from(vec![Span::styled(
+                            line,
+                            Style::default().fg(Color::Yellow),
+                        )]))
+                    } else {
+                        ListItem::new(Spans::from(line))
+                    }
+                })
+                .collect();
 
-            let files_list = List::new(list_items)
-                .block(Block::default().title("Files").borders(Borders::ALL));
+            let files_list =
+                List::new(list_items).block(Block::default().title("Files").borders(Borders::ALL));
             f.render_widget(files_list, chunks[1]);
         })?;
 
         // Handle input
-        if let Event::Key(KeyEvent { code, modifiers, .. }) = event::read()? {
+        if let Event::Key(KeyEvent {
+            code,
+            modifiers,
+            ..
+        }) = event::read()?
+        {
             match (code, modifiers) {
                 // Quit without selection
                 (KeyCode::Char('q'), _) => {
