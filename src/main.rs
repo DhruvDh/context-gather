@@ -13,16 +13,16 @@ fn main() -> Result<()> {
 
     let all_paths = gather::expand_paths(cli.paths)?;
 
-    // If exactly one path and it's a directory, we "open" that folder.
-    // Otherwise, we preselect them (e.g. globs / multiple paths).
-    let (root_dir, preselected_paths) = if all_paths.len() == 1 && all_paths[0].is_dir() {
-        (all_paths[0].clone(), vec![])  // open that folder, no preselect
+    // If exactly one path is a directory -> open it alone (no preselect).
+    // Otherwise -> gather from all input paths and preselect them.
+    let (roots, preselected_paths) = if all_paths.len() == 1 && all_paths[0].is_dir() {
+        (all_paths.clone(), vec![])
     } else {
-        (std::path::PathBuf::from("."), all_paths.clone()) // preselect
+        (all_paths.clone(), all_paths.clone())
     };
 
-    // Gather all files from the chosen root_dir
-    let mut candidate_files = gather::gather_all_file_paths(&[root_dir])?;
+    // Gather all files from the chosen roots
+    let mut candidate_files = gather::gather_all_file_paths(&roots)?;
 
     // If interactive, let user select from those files
     if cli.interactive {

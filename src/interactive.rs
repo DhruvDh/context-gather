@@ -183,16 +183,20 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
                         items[*actual_idx].1 = !items[*actual_idx].1;
                     }
                 }
-                // Ctrl-A => select all
+                // Ctrl-A => toggle (select/unselect) all VISIBLE items
                 (KeyCode::Char('a'), KeyModifiers::CONTROL) => {
-                    for i in 0..items.len() {
-                        items[i].1 = true;
+                    // Check if *all filtered* are currently selected
+                    let all_filtered_selected = filtered.iter().all(|(_, _, c)| *c);
+                    for (idx, _, _) in &filtered {
+                        items[*idx].1 = !all_filtered_selected;
                     }
                 }
-                // Ctrl-I => invert selection
+
+                // Ctrl-I => invert selection for visible items
                 (KeyCode::Char('i'), KeyModifiers::CONTROL) => {
-                    for i in 0..items.len() {
-                        items[i].1 = !items[i].1;
+                    // Invert selection for only the filtered items
+                    for (idx, _, _) in &filtered {
+                        items[*idx].1 = !items[*idx].1;
                     }
                 }
                 (KeyCode::Backspace, _) => {
