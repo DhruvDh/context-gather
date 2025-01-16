@@ -98,9 +98,9 @@ pub fn select_files_tui(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
         })?;
 
         // Handle input
-        if let Event::Key(KeyEvent { code, .. }) = event::read()? {
-            match code {
-                KeyCode::Char('q') => {
+        if let Event::Key(KeyEvent { code, modifiers, .. }) = event::read()? {
+            match (code, modifiers) {
+                (KeyCode::Char('q'), _) => {
                     // Quit without selection
                     disable_raw_mode()?;
                     execute!(
@@ -144,14 +144,14 @@ pub fn select_files_tui(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
                         items[*actual_idx].1 = !items[*actual_idx].1;
                     }
                 }
-                KeyCode::Char('a') => {
-                    // Select all
+                (KeyCode::Char('a'), KeyModifiers::CONTROL) => {
+                    // Ctrl-A => Select all
                     for i in 0..items.len() {
                         items[i].1 = true;
                     }
                 }
-                KeyCode::Char('i') => {
-                    // Invert selection
+                (KeyCode::Char('i'), KeyModifiers::CONTROL) => {
+                    // Ctrl-I => Invert selection
                     for i in 0..items.len() {
                         items[i].1 = !items[i].1;
                     }

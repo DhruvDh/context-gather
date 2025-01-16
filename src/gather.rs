@@ -5,7 +5,7 @@ use std::{
     io::{Read, BufReader},
     path::{Path, PathBuf},
 };
-use walkdir::WalkDir;
+use ignore::{WalkBuilder, DirEntry};
 use tiktoken_rs::o200k_base;
 
 #[derive(Debug)]
@@ -44,24 +44,23 @@ pub fn gather_all_file_paths(paths: &[PathBuf]) -> Result<Vec<PathBuf>> {
     let mut results = Vec::new();
 
     for path in paths {
-        if path.is_dir() {
-            // Recursively gather files in directories
-            for entry in WalkDir::new(path) {
-                match entry {
-                    Ok(e) => {
-                        if e.file_type().is_file() {
-                            results.push(e.path().to_path_buf());
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("Warning: Could not read entry in directory {:?}: {:?}", path, e);
+        // Recursively gather files with `.gitignore` support
+        let walker = WalkBuilder::new(path)
+            .follow_links(false)  // Adjust if you want to follow symlinks
+            .standard_filters(true) // Respects .gitignore, hidden files, etc.
+            .build();
+
+        for entry_result in walker {
+            match entry_result {
+                Ok(entry) => {
+                    if entry.file_type().map(|ft| ft.is_file()).unwrap_or(false) {
+                        results.push(entry.path().to_path_buf());
                     }
                 }
+                Err(e) => {
+                    eprintln!("Warning: Could not process entry in {:?}: {:?}", path, e);
+                }
             }
-        } else if path.is_file() {
-            results.push(path.to_path_buf());
-        } else {
-            eprintln!("Warning: {:?} is neither file nor directory. Skipping.", path);
         }
     }
 
