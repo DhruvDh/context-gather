@@ -12,13 +12,34 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     // 1) Expand user-specified paths (globs, etc.)
-    let user_paths = gather::expand_paths(cli.paths)?;
+    let user_paths_raw = gather::expand_paths(cli.paths)?;
+
+    // Helper: check if `candidate` is "under" any user-specified path (including exact matches).
+    fn is_preselected(candidate: &PathBuf, user_paths: &[PathBuf]) -> bool {
+        // Attempt to canonicalize the candidate; skip if it fails
+        let cand_canon = match candidate.canonicalize() {
+            Ok(c) => c,
+            Err(_) => return false,
+        };
+
+        // If any user path is a parent of `cand_canon` or exact match => true
+        for up in user_paths {
+            // Canonicalize user path
+            if let Ok(up_canon) = up.canonicalize() {
+                // starts_with() means `cand_canon` is inside or equal to `up_canon`
+                if cand_canon.starts_with(&up_canon) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
 
     // 2) Determine the "root" directory to open in TUI
     //    If exactly one path is a directory, use that as root.
     //    Otherwise, default to "."
-    let root = if user_paths.len() == 1 && user_paths[0].is_dir() {
-        user_paths[0].clone()
+    let root = if user_paths_raw.len() == 1 && user_paths_raw[0].is_dir() {
+        user_paths_raw[0].clone()
     } else {
         std::path::PathBuf::from(".")
     };
@@ -26,11 +47,11 @@ fn main() -> Result<()> {
     // 3) Gather all files in that root folder
     let mut candidate_files = gather::gather_all_file_paths(&[root])?;
 
-    // 4) Among those gathered, preselect only items that match user_paths
-    //    (i.e., if user specified certain files/folders, they start checked)
-    let preselected_paths: Vec<_> = candidate_files
+    // 4) Among those gathered, preselect anything "under" or exactly matching user-specified paths.
+    //    This uses the helper `is_preselected`.
+    let preselected_paths: Vec<PathBuf> = candidate_files
         .iter()
-        .filter(|p| user_paths.contains(p))
+        .filter(|cand| is_preselected(cand, &user_paths_raw))
         .cloned()
         .collect();
 
