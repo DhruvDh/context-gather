@@ -5,6 +5,7 @@ use std::{
     io::{Read, BufReader},
     path::{Path, PathBuf},
 };
+use walkdir::WalkDir;
 use tiktoken_rs::o200k_base;
 
 #[derive(Debug)]
@@ -42,32 +43,28 @@ pub fn collect_file_data(paths: &[PathBuf]) -> Result<Vec<FileContents>> {
     let mut results = Vec::new();
 
     for path in paths {
-        if !path.is_file() {
-            eprintln!("Warning: {:?} is not a file. Skipping.", path);
-            continue;
-        }
-
-        // Attempt to read the file
-        match fs::File::open(path) {
-            Ok(file) => {
-                let mut reader = BufReader::new(file);
-                // Try reading to string
-                let mut content = String::new();
-                if let Err(_) = reader.read_to_string(&mut content) {
-                    eprintln!("Warning: {:?} is not a valid text file. Skipping.", path);
-                    continue;
+        if path.is_dir() {
+            // Recursively gather files in directories
+            for entry in WalkDir::new(path) {
+                match entry {
+                    Ok(e) => {
+                        if e.file_type().is_file() {
+                            if let Ok(file_data) = read_file(e.path()) {
+                                results.push(file_data);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Warning: Could not read entry in directory {:?}: {:?}", path, e);
+                    }
                 }
-
-                // If successful, store results
-                results.push(FileContents {
-                    folder: path.parent().unwrap_or_else(|| Path::new("")).to_path_buf(),
-                    path: path.clone(),
-                    contents: content,
-                });
             }
-            Err(e) => {
-                eprintln!("Warning: Could not open {:?}: {:?}", path, e);
+        } else if path.is_file() {
+            if let Ok(file_data) = read_file(path) {
+                results.push(file_data);
             }
+        } else {
+            eprintln!("Warning: {:?} is neither file nor directory. Skipping.", path);
         }
     }
 
@@ -89,4 +86,17 @@ pub fn count_tokens(text: &str) -> Result<()> {
     let tokens = bpe.encode_with_special_tokens(text);
     println!("Token count: {}", tokens.len());
     Ok(())
+}
+fn read_file(path: &Path) -> Result<FileContents> {
+    let file = fs::File::open(path)?;
+    let mut reader = BufReader::new(file);
+    let mut content = String::new();
+    reader.read_to_string(&mut content)
+        .map_err(|_| anyhow!("Warning: {:?} is not a valid text file. Skipping.", path))?;
+
+    Ok(FileContents {
+        folder: path.parent().unwrap_or_else(|| Path::new("")).to_path_buf(),
+        path: path.to_path_buf(),
+        contents: content,
+    })
 }

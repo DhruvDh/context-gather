@@ -44,7 +44,7 @@ pub fn build_xml(files: &[FileContents]) -> String {
     }
 
     // Wrap everything in a top-level XML-ish tag for clarity
-    format!("<ctx-gather>\n{}\n</ctx-gather>", output)
+    format!("<current-context>\n{}\n</current-context>", output)
 }
 
 /// Escape special characters if needed (optional)
