@@ -39,7 +39,8 @@ pub fn expand_paths(paths: Vec<String>) -> Result<Vec<PathBuf>> {
     Ok(expanded)
 }
 
-pub fn collect_file_data(paths: &[PathBuf]) -> Result<Vec<FileContents>> {
+/// Returns all file paths (recursively) if any of them are directories.
+pub fn gather_all_file_paths(paths: &[PathBuf]) -> Result<Vec<PathBuf>> {
     let mut results = Vec::new();
 
     for path in paths {
@@ -49,9 +50,7 @@ pub fn collect_file_data(paths: &[PathBuf]) -> Result<Vec<FileContents>> {
                 match entry {
                     Ok(e) => {
                         if e.file_type().is_file() {
-                            if let Ok(file_data) = read_file(e.path()) {
-                                results.push(file_data);
-                            }
+                            results.push(e.path().to_path_buf());
                         }
                     }
                     Err(e) => {
@@ -60,15 +59,27 @@ pub fn collect_file_data(paths: &[PathBuf]) -> Result<Vec<FileContents>> {
                 }
             }
         } else if path.is_file() {
-            if let Ok(file_data) = read_file(path) {
-                results.push(file_data);
-            }
+            results.push(path.to_path_buf());
         } else {
             eprintln!("Warning: {:?} is neither file nor directory. Skipping.", path);
         }
     }
 
-    // Sort results by folder (then by file name)
+    results.sort();
+    results.dedup();
+    Ok(results)
+}
+
+/// Reads the contents of each file path into `FileContents`.
+pub fn collect_file_data(file_paths: &[PathBuf]) -> Result<Vec<FileContents>> {
+    let mut results = Vec::new();
+    for path in file_paths {
+        match read_file(path) {
+            Ok(fc) => results.push(fc),
+            Err(e) => eprintln!("{}", e),
+        }
+    }
+    // Sort by folder then file name
     results.sort_by(|a, b| {
         let folder_cmp = a.folder.cmp(&b.folder);
         if folder_cmp == std::cmp::Ordering::Equal {
@@ -77,7 +88,6 @@ pub fn collect_file_data(paths: &[PathBuf]) -> Result<Vec<FileContents>> {
             folder_cmp
         }
     });
-
     Ok(results)
 }
 
