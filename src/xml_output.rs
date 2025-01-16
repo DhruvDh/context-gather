@@ -17,7 +17,7 @@ pub fn build_xml(files: &[FileContents]) -> String {
             // Close the previous folder if needed
             if current_folder.is_some() {
                 output.push_str("  </folder>\n");
-                output.push_str("\n");
+                output.push('\n');
             }
             current_folder = Some(&file.folder);
 
