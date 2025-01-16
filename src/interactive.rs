@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use anyhow::Result;
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent},
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -100,8 +100,8 @@ pub fn select_files_tui(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
         // Handle input
         if let Event::Key(KeyEvent { code, modifiers, .. }) = event::read()? {
             match (code, modifiers) {
+                // Quit without selection
                 (KeyCode::Char('q'), _) => {
-                    // Quit without selection
                     disable_raw_mode()?;
                     execute!(
                         terminal.backend_mut(),
@@ -111,8 +111,8 @@ pub fn select_files_tui(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
                     terminal.show_cursor()?;
                     return Ok(vec![]);
                 }
-                KeyCode::Char('\n') => {
-                    // Done selecting
+                // Done selecting
+                (KeyCode::Enter, _) => {
                     disable_raw_mode()?;
                     execute!(
                         terminal.backend_mut(),
@@ -120,7 +120,6 @@ pub fn select_files_tui(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
                         DisableMouseCapture
                     )?;
                     terminal.show_cursor()?;
-                    // Return selected paths
                     let selected_paths: Vec<PathBuf> = items
                         .iter()
                         .filter(|(_p, checked)| *checked)
@@ -128,39 +127,39 @@ pub fn select_files_tui(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
                         .collect();
                     return Ok(selected_paths);
                 }
-                KeyCode::Up => {
+                (KeyCode::Up, _) => {
                     if selected_idx > 0 {
                         selected_idx -= 1;
                     }
                 }
-                KeyCode::Down => {
+                (KeyCode::Down, _) => {
                     if selected_idx + 1 < filtered.len() {
                         selected_idx += 1;
                     }
                 }
-                KeyCode::Char(' ') => {
-                    // Toggle checkbox on currently selected item
+                (KeyCode::Char(' '), _) => {
+                    // Toggle checkbox
                     if let Some((actual_idx, _, _)) = filtered.get(selected_idx) {
                         items[*actual_idx].1 = !items[*actual_idx].1;
                     }
                 }
+                // Ctrl-A => select all
                 (KeyCode::Char('a'), KeyModifiers::CONTROL) => {
-                    // Ctrl-A => Select all
                     for i in 0..items.len() {
                         items[i].1 = true;
                     }
                 }
+                // Ctrl-I => invert selection
                 (KeyCode::Char('i'), KeyModifiers::CONTROL) => {
-                    // Ctrl-I => Invert selection
                     for i in 0..items.len() {
                         items[i].1 = !items[i].1;
                     }
                 }
-                KeyCode::Backspace => {
+                (KeyCode::Backspace, _) => {
                     search_input.pop();
                 }
-                KeyCode::Char(c) => {
-                    // Type in fuzzy search
+                // Add typed character to fuzzy input
+                (KeyCode::Char(c), _) => {
                     search_input.push(c);
                 }
                 _ => {}

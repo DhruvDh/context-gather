@@ -5,7 +5,7 @@ use std::{
     io::{Read, BufReader},
     path::{Path, PathBuf},
 };
-use ignore::{WalkBuilder, DirEntry};
+use ignore::WalkBuilder;
 use tiktoken_rs::o200k_base;
 
 #[derive(Debug)]

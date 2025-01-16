@@ -11,7 +11,7 @@ use anyhow::Result;
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    let mut all_paths = gather::expand_paths(cli.paths)?;
+    let all_paths = gather::expand_paths(cli.paths)?;
     // 1. Turn globs & directories into a full list of files
     let mut candidate_files = gather::gather_all_file_paths(&all_paths)?;
 
