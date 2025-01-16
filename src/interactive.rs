@@ -140,8 +140,8 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
         }) = event::read()?
         {
             match (code, modifiers) {
-                // Quit without selection
-                (KeyCode::Char('q'), _) => {
+                // Quit without selection (requires Ctrl+Q)
+                (KeyCode::Char('q'), KeyModifiers::CONTROL) => {
                     disable_raw_mode()?;
                     execute!(
                         terminal.backend_mut(),
