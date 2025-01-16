@@ -171,9 +171,7 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
                     return Ok(selected_paths);
                 }
                 (KeyCode::Up, _) => {
-                    if selected_idx > 0 {
-                        selected_idx -= 1;
-                    }
+                    selected_idx = selected_idx.saturating_sub(1);
                 }
                 (KeyCode::Down, _) => {
                     if selected_idx + 1 < filtered.len() {
