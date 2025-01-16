@@ -87,7 +87,7 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
     // Main loop
     loop {
         // Recompute filtered list each frame
-        filtered = filter_items(&items, &search_input);
+        let filtered = filter_items(&items, &search_input);
         if filtered.is_empty() {
             selected_idx = 0;
         } else if selected_idx >= filtered.len() {
