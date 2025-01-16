@@ -11,20 +11,30 @@ use cli::Cli;
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    let all_paths = gather::expand_paths(cli.paths)?;
+    // 1) Expand user-specified paths (globs, etc.)
+    let user_paths = gather::expand_paths(cli.paths)?;
 
-    // If exactly one path is a directory -> open it alone (no preselect).
-    // Otherwise -> gather from all input paths and preselect them.
-    let (roots, preselected_paths) = if all_paths.len() == 1 && all_paths[0].is_dir() {
-        (all_paths.clone(), vec![])
+    // 2) Determine the "root" directory to open in TUI
+    //    If exactly one path is a directory, use that as root.
+    //    Otherwise, default to "."
+    let root = if user_paths.len() == 1 && user_paths[0].is_dir() {
+        user_paths[0].clone()
     } else {
-        (all_paths.clone(), all_paths.clone())
+        std::path::PathBuf::from(".")
     };
 
-    // Gather all files from the chosen roots
-    let mut candidate_files = gather::gather_all_file_paths(&roots)?;
+    // 3) Gather all files in that root folder
+    let mut candidate_files = gather::gather_all_file_paths(&[root])?;
 
-    // If interactive, let user select from those files
+    // 4) Among those gathered, preselect only items that match user_paths
+    //    (i.e., if user specified certain files/folders, they start checked)
+    let preselected_paths: Vec<_> = candidate_files
+        .iter()
+        .filter(|p| user_paths.contains(p))
+        .cloned()
+        .collect();
+
+    // 5) If interactive, open the TUI
     if cli.interactive {
         candidate_files = interactive::select_files_tui(candidate_files, &preselected_paths)?;
     }
