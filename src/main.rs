@@ -18,7 +18,7 @@ fn main() -> Result<()> {
 
     // Helper: check if `candidate` is "under" any user-specified path (including
     // exact matches).
-    fn is_preselected(candidate: &PathBuf, user_paths: &[PathBuf]) -> bool {
+    fn is_preselected(candidate: &std::path::Path, user_paths: &[PathBuf]) -> bool {
         // Attempt to canonicalize the candidate; skip if it fails
         let cand_canon = match candidate.canonicalize() {
             Ok(c) => c,

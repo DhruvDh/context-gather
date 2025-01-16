@@ -75,7 +75,6 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
     };
 
     // Keep track of the currently selected index among filtered items
-    let mut filtered = filter_items(&items, &search_input);
     let mut selected_idx = 0usize;
 
     // Setup terminal
