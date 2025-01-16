@@ -4,6 +4,8 @@ mod gather;
 mod interactive;
 mod xml_output;
 
+use std::path::PathBuf;
+
 use anyhow::Result;
 use clap::Parser;
 use cli::Cli;
@@ -14,7 +16,8 @@ fn main() -> Result<()> {
     // 1) Expand user-specified paths (globs, etc.)
     let user_paths_raw = gather::expand_paths(cli.paths)?;
 
-    // Helper: check if `candidate` is "under" any user-specified path (including exact matches).
+    // Helper: check if `candidate` is "under" any user-specified path (including
+    // exact matches).
     fn is_preselected(candidate: &PathBuf, user_paths: &[PathBuf]) -> bool {
         // Attempt to canonicalize the candidate; skip if it fails
         let cand_canon = match candidate.canonicalize() {
@@ -35,9 +38,8 @@ fn main() -> Result<()> {
         false
     }
 
-    // 2) Determine the "root" directory to open in TUI
-    //    If exactly one path is a directory, use that as root.
-    //    Otherwise, default to "."
+    // 2) Determine the "root" directory to open in TUI If exactly one path is a
+    //    directory, use that as root. Otherwise, default to "."
     let root = if user_paths_raw.len() == 1 && user_paths_raw[0].is_dir() {
         user_paths_raw[0].clone()
     } else {
@@ -47,8 +49,8 @@ fn main() -> Result<()> {
     // 3) Gather all files in that root folder
     let mut candidate_files = gather::gather_all_file_paths(&[root])?;
 
-    // 4) Among those gathered, preselect anything "under" or exactly matching user-specified paths.
-    //    This uses the helper `is_preselected`.
+    // 4) Among those gathered, preselect anything "under" or exactly matching
+    //    user-specified paths. This uses the helper `is_preselected`.
     let preselected_paths: Vec<PathBuf> = candidate_files
         .iter()
         .filter(|cand| is_preselected(cand, &user_paths_raw))
