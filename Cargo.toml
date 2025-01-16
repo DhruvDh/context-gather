@@ -12,3 +12,4 @@ tiktoken-rs = "0.6.0"
 walkdir = "2.5.0"
 clap = { version = "4.4.6", features = ["derive"] }
 tui = "0.19.0"
+ignore = { version = "0.4.23", features = ["simd-accel"] }
