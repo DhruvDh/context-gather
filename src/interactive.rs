@@ -46,10 +46,13 @@ use tui::{
 
 pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<Vec<PathBuf>> {
     // Mark items as checked if they're in `preselected`
-    let mut items: Vec<(PathBuf, bool)> = paths.into_iter().map(|p| {
-        let is_checked = preselected.contains(&p);
-        (p, is_checked)
-    }).collect();
+    let mut items: Vec<(PathBuf, bool)> = paths
+        .into_iter()
+        .map(|p| {
+            let is_checked = preselected.contains(&p);
+            (p, is_checked)
+        })
+        .collect();
 
     // State for fuzzy search input
     let mut search_input = String::new();
@@ -192,11 +195,11 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
                     }
                 }
 
-                // Ctrl-I => invert selection for visible items
+                // Ctrl-I => invert selection for all items
                 (KeyCode::Char('i'), KeyModifiers::CONTROL) => {
-                    // Invert selection for only the filtered items
-                    for (idx, _, _) in &filtered {
-                        items[*idx].1 = !items[*idx].1;
+                    // Invert selection for all items, not just filtered ones
+                    for (_, checked) in items.iter_mut() {
+                        *checked = !*checked;
                     }
                 }
                 (KeyCode::Backspace, _) => {
