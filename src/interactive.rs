@@ -61,21 +61,19 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
         })
         .collect();
 
-    // State for fuzzy search input
-    let mut search_input = String::new();
-
-    // ---------------------------
-    // EXTENSION MODE STATE
-    // ---------------------------
-    let mut extension_mode = false;
-
-    // First: build a map: extension -> how many files have this extension
+    // Build a map: extension -> frequency BEFORE building extension_items
     let mut ext_counts: HashMap<String, usize> = HashMap::new();
     for (p, _) in &items {
         if let Some(ext) = p.extension().map(|e| format!(".{}", e.to_string_lossy())) {
             *ext_counts.entry(ext).or_insert(0) += 1;
         }
     }
+
+    // State for fuzzy search input
+    let mut search_input = String::new();
+
+    // EXTENSION MODE STATE
+    let mut extension_mode = false;
 
     // Now: extension_items: (ext_string, checked)
     let mut extension_items: Vec<(String, bool)> = {
@@ -230,7 +228,7 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
         };
 
         // Sizing for the main list area
-        let size = terminal.size()?;
+        let _size = terminal.size()?;
 
         // If in extension mode => ext_selected_idx logic
         if extension_mode && !ext_filtered.is_empty() && ext_selected_idx >= ext_filtered.len() {
@@ -248,7 +246,7 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
 
         // Draw UI
         terminal.draw(|f| {
-            let size = f.size();
+            let _size = f.size();
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
@@ -275,19 +273,18 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
             // (2) Show total # selected for normal mode
             let total_checked = items.iter().filter(|(_, c)| *c).count();
 
-            // We'll incorporate that into the top bar's title if NOT extension mode
-            let (title, input_str) = if extension_mode {
-                ("Extensions (Ctrl+E to exit, Enter to confirm)", &extension_search)
+            // Build title string that outlives the match
+            let mut title_str = String::new();
+            let input_str = if extension_mode {
+                title_str.push_str("Extensions (Ctrl+E to exit, Enter to confirm)");
+                &extension_search
             } else {
-                // Example: "Fuzzy Search (3 selected)"
-                let mut top_title = String::new();
-                use std::fmt::Write as _;
-                write!(&mut top_title, "Fuzzy Search ({} selected)", total_checked).ok();
-                (top_title.as_str(), &search_input)
+                write!(title_str, "Fuzzy Search ({} selected)", total_checked).ok();
+                &search_input
             };
 
             let search_bar = Paragraph::new(input_str.as_str())
-                .block(Block::default().title(title).borders(Borders::ALL));
+                .block(Block::default().title(&title_str).borders(Borders::ALL));
             f.render_widget(search_bar, chunks[0]);
 
             // If extension_mode => display extension list. Otherwise => display file list
