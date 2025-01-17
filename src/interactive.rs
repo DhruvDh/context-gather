@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use fuzzy_matcher::{FuzzyMatcher, skim::SkimMatcherV2};
 use crossterm::{
     event::{
         self,
@@ -19,6 +18,10 @@ use crossterm::{
         disable_raw_mode,
         enable_raw_mode,
     },
+};
+use fuzzy_matcher::{
+    FuzzyMatcher,
+    skim::SkimMatcherV2,
 };
 use tui::{
     Terminal,
@@ -121,7 +124,7 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
 
             let list_area = chunks[1];
             // The list area height determines how many lines we can show
-            let max_lines = list_area.height.saturating_sub(2) as usize; 
+            let max_lines = list_area.height.saturating_sub(2) as usize;
             // some extra margin for borders, adjust as needed
 
             // Adjust scroll_offset so selected_idx is always in view
@@ -204,7 +207,7 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
                 (KeyCode::Up, _) => {
                     selected_idx = selected_idx.saturating_sub(1);
                 }
-                (KeyCode::Down, _) => { 
+                (KeyCode::Down, _) => {
                     if !filtered.is_empty() && selected_idx < filtered.len() - 1 {
                         selected_idx += 1;
                     }
