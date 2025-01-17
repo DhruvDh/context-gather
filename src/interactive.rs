@@ -76,7 +76,18 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
             .collect();
         exts.sort();
         exts.dedup();
-        exts.into_iter().map(|e| (e, false)).collect()
+        // Now we sort by frequency in descending order
+        let mut with_counts: Vec<(String, usize)> = exts.into_iter().map(|e| {
+            let c = ext_counts.get(&e).cloned().unwrap_or(0);
+            (e, c)
+        }).collect();
+        // Sort by c descending
+        with_counts.sort_by_key(|&(_, c)| std::cmp::Reverse(c));
+
+        // Then build extension_items from that
+        with_counts.into_iter()
+            .map(|(e, _freq)| (e, false))
+            .collect()
     };
     // We'll also maintain an extension search input
     let mut extension_search = String::new();
