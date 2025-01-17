@@ -68,6 +68,15 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
     // EXTENSION MODE STATE
     // ---------------------------
     let mut extension_mode = false;
+    
+    // Build a map: extension -> how many files have this extension
+    let mut ext_counts: HashMap<String, usize> = HashMap::new();
+    for (p, _) in &items {
+        if let Some(ext) = p.extension().map(|e| format!(".{}", e.to_string_lossy())) {
+            *ext_counts.entry(ext).or_insert(0) += 1;
+        }
+    }
+
     // extension_items: (ext_string, checked)
     let mut extension_items: Vec<(String, bool)> = {
         let mut exts: Vec<String> = items
