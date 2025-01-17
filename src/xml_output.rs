@@ -27,16 +27,13 @@ pub fn build_xml(files: &[FileContents]) -> String {
         }
 
         // Add file contents
-        let file_name = file
-            .path
-            .file_name()
-            .map(|s| s.to_string_lossy().to_string())
-            .unwrap_or_else(|| "unknown".to_string());
+        let file_name = file.path
+                            .file_name()
+                            .map(|s| s.to_string_lossy().to_string())
+                            .unwrap_or_else(|| "unknown".to_string());
         let path_str = file.path.to_string_lossy();
-        output.push_str(&format!(
-            "    <file-contents path=\"{}\" name=\"{}\">\n",
-            path_str, file_name
-        ));
+        output.push_str(&format!("    <file-contents path=\"{}\" name=\"{}\">\n",
+                                 path_str, file_name));
         // Indent file contents for readability, or just dump them as-is
         output.push_str(&format!("{}\n", file.contents));
         output.push_str("    </file-contents>\n");

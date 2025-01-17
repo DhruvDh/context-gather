@@ -18,7 +18,9 @@ fn main() -> Result<()> {
 
     // Helper: check if `candidate` is "under" any user-specified path (including
     // exact matches).
-    fn is_preselected(candidate: &std::path::Path, user_paths: &[PathBuf]) -> bool {
+    fn is_preselected(candidate: &std::path::Path,
+                      user_paths: &[PathBuf])
+                      -> bool {
         // Attempt to canonicalize the candidate; skip if it fails
         let cand_canon = match candidate.canonicalize() {
             Ok(c) => c,
@@ -51,11 +53,11 @@ fn main() -> Result<()> {
 
     // 4) Among those gathered, preselect anything "under" or exactly matching
     //    user-specified paths. This uses the helper `is_preselected`.
-    let preselected_paths: Vec<PathBuf> = candidate_files
-        .iter()
-        .filter(|cand| is_preselected(cand, &user_paths_raw))
-        .cloned()
-        .collect();
+    let preselected_paths: Vec<PathBuf> =
+        candidate_files.iter()
+                       .filter(|cand| is_preselected(cand, &user_paths_raw))
+                       .cloned()
+                       .collect();
 
     // 5) If interactive, open the TUI
     if cli.interactive {

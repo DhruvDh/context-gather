@@ -1,8 +1,5 @@
 use std::{
-    collections::{
-        HashMap,
-        HashSet,
-    },
+    collections::{HashMap, HashSet},
     fmt::Write as FmtWrite,
     path::PathBuf,
 };
@@ -10,58 +7,27 @@ use std::{
 use anyhow::Result;
 use crossterm::{
     event::{
-        self,
-        DisableMouseCapture,
-        EnableMouseCapture,
-        Event,
-        KeyCode,
-        KeyEvent,
-        KeyModifiers,
+        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyModifiers,
     },
     execute,
-    terminal::{
-        EnterAlternateScreen,
-        LeaveAlternateScreen,
-        disable_raw_mode,
-        enable_raw_mode,
-    },
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use fuzzy_matcher::{
-    FuzzyMatcher,
-    skim::SkimMatcherV2,
-};
+use fuzzy_matcher::{FuzzyMatcher, skim::SkimMatcherV2};
 use tui::{
     Terminal,
     backend::CrosstermBackend,
-    layout::{
-        Constraint,
-        Direction,
-        Layout,
-    },
-    style::{
-        Color,
-        Style,
-    },
-    text::{
-        Span,
-        Spans,
-    },
-    widgets::{
-        Block,
-        Borders,
-        List,
-        ListItem,
-        Paragraph,
-    },
+    layout::{Constraint, Direction, Layout},
+    style::{Color, Style},
+    text::{Span, Spans},
+    widgets::{Block, Borders, List, ListItem, Paragraph},
 };
 
 // Helper function for scrolling logic
-fn adjust_scroll_and_slice(
-    selected_idx: &mut usize,
-    scroll_offset: &mut usize,
-    max_lines: usize,
-    data_len: usize,
-) -> (usize, usize) {
+fn adjust_scroll_and_slice(selected_idx: &mut usize,
+                           scroll_offset: &mut usize,
+                           max_lines: usize,
+                           data_len: usize)
+                           -> (usize, usize) {
     // If selected_idx is above the current scroll, move scroll up
     if *selected_idx < *scroll_offset {
         *scroll_offset = *selected_idx;
@@ -75,15 +41,16 @@ fn adjust_scroll_and_slice(
     (*scroll_offset, end_idx)
 }
 
-pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<Vec<PathBuf>> {
+pub fn select_files_tui(paths: Vec<PathBuf>,
+                        preselected: &[PathBuf])
+                        -> Result<Vec<PathBuf>> {
     // Mark items as checked if they're in `preselected`
-    let mut items: Vec<(PathBuf, bool)> = paths
-        .into_iter()
-        .map(|p| {
-            let is_checked = preselected.contains(&p);
-            (p, is_checked)
-        })
-        .collect();
+    let mut items: Vec<(PathBuf, bool)> = paths.into_iter()
+                                               .map(|p| {
+                                                   let is_checked = preselected.contains(&p);
+                                                   (p, is_checked)
+                                               })
+                                               .collect();
 
     // Build a map: extension -> frequency BEFORE building extension_items
     let mut ext_counts: HashMap<String, usize> = HashMap::new();
@@ -101,28 +68,27 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
 
     // Now: extension_items: (ext_string, checked)
     let mut extension_items: Vec<(String, bool)> = {
-        let mut exts: Vec<String> = items
-            .iter()
-            .filter_map(|(p, _)| p.extension().map(|e| format!(".{}", e.to_string_lossy())))
-            .collect();
+        let mut exts: Vec<String> =
+            items.iter()
+                 .filter_map(|(p, _)| p.extension().map(|e| format!(".{}", e.to_string_lossy())))
+                 .collect();
         exts.sort();
         exts.dedup();
         // Now we sort by frequency in descending order
-        let mut with_counts: Vec<(String, usize)> = exts
-            .into_iter()
-            .map(|e| {
-                let c = ext_counts.get(&e).cloned().unwrap_or(0);
-                (e, c)
-            })
-            .collect();
+        let mut with_counts: Vec<(String, usize)> =
+            exts.into_iter()
+                .map(|e| {
+                    let c = ext_counts.get(&e).cloned().unwrap_or(0);
+                    (e, c)
+                })
+                .collect();
         // Sort by c descending
         with_counts.sort_by_key(|&(_, c)| std::cmp::Reverse(c));
 
         // Then build extension_items from that
-        with_counts
-            .into_iter()
-            .map(|(e, _freq)| (e, false))
-            .collect()
+        with_counts.into_iter()
+                   .map(|(e, _freq)| (e, false))
+                   .collect()
     };
     // We'll also maintain an extension search input
     let mut extension_search = String::new();
@@ -138,12 +104,10 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
     // ---------------------------------------------------
     // (1) FACTOR OUT EXTENSION-TOGGLING INTO A HELPER
     // ---------------------------------------------------
-    fn apply_extension_items(
-        chosen_exts: &HashSet<String>,
-        items: &mut [(PathBuf, bool)],
-        union_mode: bool,
-        all_known_exts: &HashSet<String>,
-    ) {
+    fn apply_extension_items(chosen_exts: &HashSet<String>,
+                             items: &mut [(PathBuf, bool)],
+                             union_mode: bool,
+                             all_known_exts: &HashSet<String>) {
         for (p, checked) in items.iter_mut() {
             if let Some(pext) = p.extension().map(|e| format!(".{}", e.to_string_lossy())) {
                 if all_known_exts.contains(&pext) {
@@ -165,11 +129,10 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
     let filter_items = |items: &[(PathBuf, bool)], search: &str| {
         // If nothing is typed, just return everything in original order:
         if search.is_empty() {
-            return items
-                .iter()
-                .enumerate()
-                .map(|(idx, (p, checked))| (idx, p.clone(), *checked))
-                .collect::<Vec<_>>();
+            return items.iter()
+                        .enumerate()
+                        .map(|(idx, (p, checked))| (idx, p.clone(), *checked))
+                        .collect::<Vec<_>>();
         }
 
         // Otherwise, do fuzzy matching with descending score
@@ -232,11 +195,10 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
             };
 
             let raw: Vec<(usize, String, bool)> = if extension_search.is_empty() {
-                extension_items
-                    .iter()
-                    .enumerate()
-                    .map(|(i, (e, c))| (i, e.clone(), *c))
-                    .collect()
+                extension_items.iter()
+                               .enumerate()
+                               .map(|(i, (e, c))| (i, e.clone(), *c))
+                               .collect()
             } else {
                 let matcher = SkimMatcherV2::default();
                 let mut results = Vec::new();
@@ -272,136 +234,127 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
 
         // Draw UI
         terminal.draw(|f| {
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Length(3), // for search input
-                    Constraint::Min(1),    // for file list
-                ])
-                .split(f.size());
+                    let chunks =
+                        Layout::default().direction(Direction::Vertical)
+                                         .constraints([Constraint::Length(3), // for search input
+                                                       Constraint::Min(1)     /* for file list */])
+                                         .split(f.size());
 
-            let list_area = chunks[1];
-            // The list area height determines how many lines we can show
-            let max_lines = list_area.height.saturating_sub(2) as usize;
-            // some extra margin for borders, adjust as needed
+                    let list_area = chunks[1];
+                    // The list area height determines how many lines we can show
+                    let max_lines = list_area.height.saturating_sub(2) as usize;
+                    // some extra margin for borders, adjust as needed
 
-            // Use helper for normal mode scrolling
-            let (new_scroll, _) = adjust_scroll_and_slice(
-                &mut selected_idx,
-                &mut scroll_offset,
-                max_lines,
-                filtered.len(),
-            );
+                    // Use helper for normal mode scrolling
+                    let (new_scroll, _) = adjust_scroll_and_slice(&mut selected_idx,
+                                                                  &mut scroll_offset,
+                                                                  max_lines,
+                                                                  filtered.len());
 
-            // (2) Show total # selected for normal mode
-            let total_checked = items.iter().filter(|(_, c)| *c).count();
+                    // (2) Show total # selected for normal mode
+                    let total_checked = items.iter().filter(|(_, c)| *c).count();
 
-            // Build title string that outlives the match
-            let mut title_str = String::new();
-            let input_str = if extension_mode {
-                title_str.push_str("Extensions (Ctrl+E to exit, Enter to confirm)");
-                &extension_search
-            } else {
-                write!(title_str, "Fuzzy Search ({} selected)", total_checked).ok();
-                &search_input
-            };
+                    // Build title string that outlives the match
+                    let mut title_str = String::new();
+                    let input_str = if extension_mode {
+                        title_str.push_str("Extensions (Ctrl+E to exit, Enter to confirm)");
+                        &extension_search
+                    } else {
+                        write!(title_str, "Fuzzy Search ({} selected)", total_checked).ok();
+                        &search_input
+                    };
 
-            let search_bar = Paragraph::new(input_str.as_str()).block(
+                    let search_bar = Paragraph::new(input_str.as_str()).block(
                 Block::default()
                     .title(title_str.as_str())
                     .borders(Borders::ALL),
             );
-            f.render_widget(search_bar, chunks[0]);
+                    f.render_widget(search_bar, chunks[0]);
 
-            // If extension_mode => display extension list. Otherwise => display file list
-            if extension_mode {
-                // We'll do the same "scroll offset" pattern => ext_scroll_offset
-                let list_area = chunks[1];
-                let max_lines = list_area.height.saturating_sub(2) as usize;
+                    // If extension_mode => display extension list. Otherwise => display file list
+                    if extension_mode {
+                        // We'll do the same "scroll offset" pattern => ext_scroll_offset
+                        let list_area = chunks[1];
+                        let max_lines = list_area.height.saturating_sub(2) as usize;
 
-                // Use helper for extension mode scrolling
-                let (new_ext_scroll, ext_end_idx) = adjust_scroll_and_slice(
-                    &mut ext_selected_idx,
-                    &mut ext_scroll_offset,
-                    max_lines,
-                    ext_filtered.len(),
-                );
-                let slice = &ext_filtered[new_ext_scroll..ext_end_idx];
+                        // Use helper for extension mode scrolling
+                        let (new_ext_scroll, ext_end_idx) =
+                            adjust_scroll_and_slice(&mut ext_selected_idx,
+                                                    &mut ext_scroll_offset,
+                                                    max_lines,
+                                                    ext_filtered.len());
+                        let slice = &ext_filtered[new_ext_scroll..ext_end_idx];
 
-                // build items
-                let list_items: Vec<ListItem> = slice
-                    .iter()
-                    .enumerate()
-                    .map(|(i, (_orig_idx, ext_string, is_checked))| {
-                        let displayed_idx = i + new_ext_scroll;
-                        let mark = if *is_checked { "[x]" } else { "[ ]" };
-                        let line = format!("{} {}", mark, ext_string);
-                        if displayed_idx == ext_selected_idx {
-                            ListItem::new(Spans::from(vec![Span::styled(
+                        // build items
+                        let list_items: Vec<ListItem> =
+                            slice.iter()
+                                 .enumerate()
+                                 .map(|(i, (_orig_idx, ext_string, is_checked))| {
+                                     let displayed_idx = i + new_ext_scroll;
+                                     let mark = if *is_checked { "[x]" } else { "[ ]" };
+                                     let line = format!("{} {}", mark, ext_string);
+                                     if displayed_idx == ext_selected_idx {
+                                         ListItem::new(Spans::from(vec![Span::styled(
                                 line,
                                 Style::default().fg(Color::Yellow),
                             )]))
-                        } else {
-                            ListItem::new(Spans::from(line))
+                                     } else {
+                                         ListItem::new(Spans::from(line))
+                                     }
+                                 })
+                                 .collect();
+
+                        let ext_list =
+                            List::new(list_items).block(Block::default().title("Extensions")
+                                                                        .borders(Borders::ALL));
+                        f.render_widget(ext_list, chunks[1]);
+                    } else {
+                        // normal file list
+                        let list_area = chunks[1];
+                        let max_lines = list_area.height.saturating_sub(2) as usize;
+                        if selected_idx < scroll_offset {
+                            scroll_offset = selected_idx;
+                        } else if selected_idx >= scroll_offset + max_lines {
+                            scroll_offset =
+                                selected_idx.saturating_sub(max_lines).saturating_add(1);
                         }
-                    })
-                    .collect();
+                        let end_idx = (scroll_offset + max_lines).min(filtered.len());
+                        let visible_slice = &filtered[new_scroll..end_idx];
 
-                let ext_list = List::new(list_items)
-                    .block(Block::default().title("Extensions").borders(Borders::ALL));
-                f.render_widget(ext_list, chunks[1]);
-            } else {
-                // normal file list
-                let list_area = chunks[1];
-                let max_lines = list_area.height.saturating_sub(2) as usize;
-                if selected_idx < scroll_offset {
-                    scroll_offset = selected_idx;
-                } else if selected_idx >= scroll_offset + max_lines {
-                    scroll_offset = selected_idx.saturating_sub(max_lines).saturating_add(1);
-                }
-                let end_idx = (scroll_offset + max_lines).min(filtered.len());
-                let visible_slice = &filtered[new_scroll..end_idx];
-
-                let list_items: Vec<ListItem> = visible_slice
-                    .iter()
-                    .enumerate()
-                    .map(|(i, (_idx_p, path, checked))| {
-                        let displayed_idx = i + new_scroll;
-                        let mark = if *checked { "[x]" } else { "[ ]" };
-                        let line = format!("{} {}", mark, path.display());
-                        if displayed_idx == selected_idx {
-                            ListItem::new(Spans::from(vec![Span::styled(
+                        let list_items: Vec<ListItem> =
+                            visible_slice.iter()
+                                         .enumerate()
+                                         .map(|(i, (_idx_p, path, checked))| {
+                                             let displayed_idx = i + new_scroll;
+                                             let mark = if *checked { "[x]" } else { "[ ]" };
+                                             let line = format!("{} {}", mark, path.display());
+                                             if displayed_idx == selected_idx {
+                                                 ListItem::new(Spans::from(vec![Span::styled(
                                 line,
                                 Style::default().fg(Color::Yellow),
                             )]))
-                        } else {
-                            ListItem::new(Spans::from(line))
-                        }
-                    })
-                    .collect();
+                                             } else {
+                                                 ListItem::new(Spans::from(line))
+                                             }
+                                         })
+                                         .collect();
 
-                let files_list = List::new(list_items)
-                    .block(Block::default().title("Files").borders(Borders::ALL));
-                f.render_widget(files_list, chunks[1]);
-            }
-        })?;
+                        let files_list =
+                            List::new(list_items).block(Block::default().title("Files")
+                                                                        .borders(Borders::ALL));
+                        f.render_widget(files_list, chunks[1]);
+                    }
+                })?;
 
         // Handle input
-        if let Event::Key(KeyEvent {
-            code,
-            modifiers,
-            ..
-        }) = event::read()?
-        {
+        if let Event::Key(KeyEvent { code, modifiers, .. }) = event::read()? {
             match (code, modifiers) {
                 // Quit without selection (requires Ctrl+Q)
                 (KeyCode::Char('q'), KeyModifiers::CONTROL) => {
                     disable_raw_mode()?;
-                    execute!(
-                        terminal.backend_mut(),
-                        LeaveAlternateScreen,
-                        DisableMouseCapture
-                    )?;
+                    execute!(terminal.backend_mut(),
+                             LeaveAlternateScreen,
+                             DisableMouseCapture)?;
                     terminal.show_cursor()?;
                     return Ok(vec![]);
                 }
@@ -447,10 +400,12 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
                 // If extension_mode => pressing Enter => apply extension checks to items
                 (KeyCode::Enter, _) if extension_mode => {
                     // gather all extension_items that are checked
-                    let chosen_exts: HashSet<String> = extension_items
-                        .iter()
-                        .filter_map(|(ext, c)| if *c { Some(ext.clone()) } else { None })
-                        .collect();
+                    let chosen_exts: HashSet<String> =
+                        extension_items.iter()
+                                       .filter_map(|(ext, c)| {
+                                                       if *c { Some(ext.clone()) } else { None }
+                                                   })
+                                       .collect();
 
                     // Instead, let's REPLACE the checks for those file extensions only:
                     // i.e. if an extension is now unchecked, we un-check matching items
@@ -475,17 +430,14 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
                 // Otherwise, if not in extension mode, Enter finalizes
                 (KeyCode::Enter, _) => {
                     disable_raw_mode()?;
-                    execute!(
-                        terminal.backend_mut(),
-                        LeaveAlternateScreen,
-                        DisableMouseCapture
-                    )?;
+                    execute!(terminal.backend_mut(),
+                             LeaveAlternateScreen,
+                             DisableMouseCapture)?;
                     terminal.show_cursor()?;
-                    let selected_paths: Vec<PathBuf> = items
-                        .iter()
-                        .filter(|(_p, checked)| *checked)
-                        .map(|(p, _)| p.clone())
-                        .collect();
+                    let selected_paths: Vec<PathBuf> = items.iter()
+                                                            .filter(|(_p, checked)| *checked)
+                                                            .map(|(p, _)| p.clone())
+                                                            .collect();
                     return Ok(selected_paths);
                 }
                 (KeyCode::Up, _) => {

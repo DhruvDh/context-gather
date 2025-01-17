@@ -1,19 +1,10 @@
 use std::{
     fs,
-    io::{
-        BufReader,
-        Read,
-    },
-    path::{
-        Path,
-        PathBuf,
-    },
+    io::{BufReader, Read},
+    path::{Path, PathBuf},
 };
 
-use anyhow::{
-    Result,
-    anyhow,
-};
+use anyhow::{Result, anyhow};
 use glob::glob;
 use ignore::WalkBuilder;
 use tiktoken_rs::o200k_base;
@@ -30,8 +21,7 @@ pub fn expand_paths(paths: Vec<String>) -> Result<Vec<PathBuf>> {
 
     for p in paths {
         // Attempt to treat it like a glob first
-        let pattern_results =
-            glob(&p).map_err(|e| anyhow!("Invalid glob pattern {}: {:?}", p, e))?;
+        let pattern_results = glob(&p).map_err(|e| anyhow!("Invalid glob pattern {}: {:?}", p, e))?;
 
         // If no matches, consider it a normal path
         let mut has_match = false;
@@ -55,10 +45,9 @@ pub fn gather_all_file_paths(paths: &[PathBuf]) -> Result<Vec<PathBuf>> {
 
     for path in paths {
         // Recursively gather files with `.gitignore` support
-        let walker = WalkBuilder::new(path)
-            .follow_links(false) // Adjust if you want to follow symlinks
-            .standard_filters(true) // Respects .gitignore, hidden files, etc.
-            .build();
+        let walker = WalkBuilder::new(path).follow_links(false) // Adjust if you want to follow symlinks
+                                           .standard_filters(true) // Respects .gitignore, hidden files, etc.
+                                           .build();
 
         for entry_result in walker {
             match entry_result {
@@ -90,13 +79,13 @@ pub fn collect_file_data(file_paths: &[PathBuf]) -> Result<Vec<FileContents>> {
     }
     // Sort by folder then file name
     results.sort_by(|a, b| {
-        let folder_cmp = a.folder.cmp(&b.folder);
-        if folder_cmp == std::cmp::Ordering::Equal {
-            a.path.cmp(&b.path)
-        } else {
-            folder_cmp
-        }
-    });
+               let folder_cmp = a.folder.cmp(&b.folder);
+               if folder_cmp == std::cmp::Ordering::Equal {
+                   a.path.cmp(&b.path)
+               } else {
+                   folder_cmp
+               }
+           });
     Ok(results)
 }
 
@@ -110,13 +99,13 @@ fn read_file(path: &Path) -> Result<FileContents> {
     let file = fs::File::open(path)?;
     let mut reader = BufReader::new(file);
     let mut content = String::new();
-    reader
-        .read_to_string(&mut content)
-        .map_err(|_| anyhow!("Warning: {:?} is not a valid text file. Skipping.", path))?;
+    reader.read_to_string(&mut content).map_err(|_| {
+                                            anyhow!("Warning: {:?} is not a valid text file. \
+                                                     Skipping.",
+                                                    path)
+                                        })?;
 
-    Ok(FileContents {
-        folder:   path.parent().unwrap_or_else(|| Path::new("")).to_path_buf(),
-        path:     path.to_path_buf(),
-        contents: content,
-    })
+    Ok(FileContents { folder:   path.parent().unwrap_or_else(|| Path::new("")).to_path_buf(),
+                      path:     path.to_path_buf(),
+                      contents: content, })
 }
