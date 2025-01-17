@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::collections::{HashSet, HashMap};
 use std::cmp::min;
+use std::fmt::Write as FmtWrite;
 
 use anyhow::Result;
 use crossterm::{
@@ -140,12 +141,29 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
 
         // If we *are* in extension mode, let's do fuzzy matching over extension_items
         let ext_filtered = if extension_mode {
-            if extension_search.is_empty() {
-                extension_items
-                    .iter()
+            // We'll create a local function that returns the "display string"
+            let display_ext = |ext: &str| {
+                if let Some(count) = ext_counts.get(ext) {
+                    let mut s = String::new();
+                    // e.g. ".rs (12)"
+                    let _ = write!(s, "{} ({})", ext, count);
+                    s
+                } else {
+                    ext.to_owned()
+                }
+            };
+
+            let to_list = |(i, e, c): (usize, String, bool)| -> (usize, String, bool) {
+                // We'll transform e into e + " (count)"
+                let shown = display_ext(&e);
+                (i, shown, c)
+            };
+
+            let raw: Vec<(usize, String, bool)> = if extension_search.is_empty() {
+                extension_items.iter()
                     .enumerate()
                     .map(|(i, (e, c))| (i, e.clone(), *c))
-                    .collect::<Vec<_>>()
+                    .collect()
             } else {
                 let matcher = SkimMatcherV2::default();
                 let mut results = Vec::new();
@@ -357,6 +375,8 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
                     // Instead, let's REPLACE the checks for those file extensions only:
                     // i.e. if an extension is now unchecked, we un-check matching items
                     // So first gather ALL known ext -> are they chosen?
+                    let union_mode = false; // set to true if user wants union
+
                     let all_known_exts: HashSet<String> = extension_items
                         .iter()
                         .map(|(ext, _)| ext.clone())
@@ -364,9 +384,16 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
 
                     for (p, checked) in items.iter_mut() {
                         if let Some(pext) = p.extension().map(|e| format!(".{}", e.to_string_lossy())) {
-                            // If it's in the full set of known exts, we override
                             if all_known_exts.contains(&pext) {
-                                *checked = chosen_exts.contains(&pext);
+                                if union_mode {
+                                    // Just set to true if chosen_exts has it, else keep old
+                                    if chosen_exts.contains(&pext) {
+                                        *checked = true;
+                                    }
+                                } else {
+                                    // The existing logic: if it's in known exts, override with whether chosen_exts has it
+                                    *checked = chosen_exts.contains(&pext);
+                                }
                             }
                         }
                     }
@@ -434,6 +461,15 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
                     }
                 }
                 // Finally, add typed character
+                (KeyCode::Char('r'), KeyModifiers::CONTROL) => {
+                    // Uncheck everything
+                    for (_, checked) in items.iter_mut() {
+                        *checked = false;
+                    }
+                    for (_, checked) in extension_items.iter_mut() {
+                        *checked = false;
+                    }
+                }
                 (KeyCode::Char(c), _) => {
                     if extension_mode {
                         extension_search.push(c);
