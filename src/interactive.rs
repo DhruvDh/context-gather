@@ -199,54 +199,6 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
         }) = event::read()?
         {
             match (code, modifiers) {
-                // If user presses Enter *while in extension mode* => do fuzzy match for extension
-                (KeyCode::Enter, _) if extension_mode => {
-                    use fuzzy_matcher::FuzzyMatcher;
-                    let matcher = SkimMatcherV2::default();
-                    // If empty => do nothing
-                    if extension_input.is_empty() {
-                        extension_mode = false;
-                    } else {
-                        // Fuzzy match among all_exts
-                        let mut best_score = None;
-                        let mut best_ext = None;
-                        for ext in &all_exts {
-                            if let Some(score) = matcher.fuzzy_match(ext, &extension_input) {
-                                if best_score.is_none_or(|s| score > s) {
-                                    best_score = Some(score);
-                                    best_ext = Some(ext.clone());
-                                }
-                            }
-                        }
-                        // If we found a best match => select all items with that extension
-                        if let Some(ext_str) = best_ext {
-                            for (p, checked) in items.iter_mut() {
-                                if p.extension().map(|e| format!(".{}", e.to_string_lossy()))
-                                    == Some(ext_str.clone())
-                                {
-                                    *checked = true;
-                                }
-                            }
-                        }
-                        // Exit extension mode
-                        extension_mode = false;
-                    }
-                }
-
-                // Ctrl+E => switch to or handle extension mode
-                (KeyCode::Char('e'), KeyModifiers::CONTROL) => {
-                    // If we're not already in extension mode, switch to it
-                    // and clear extension_input
-                    if !extension_mode {
-                        extension_mode = true;
-                        extension_input.clear();
-                    } else {
-                        // If we are *already* in extension mode and press Ctrl+E again,
-                        // maybe just exit extension mode
-                        extension_mode = false;
-                    }
-                }
-
                 // Quit without selection (requires Ctrl+Q)
                 (KeyCode::Char('q'), KeyModifiers::CONTROL) => {
                     disable_raw_mode()?;
@@ -306,58 +258,12 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
                 (KeyCode::Backspace, _) => {
                     search_input.pop();
                 }
-                // Add typed character to fuzzy input
+                // Add typed character to fuzzy input (must be last to not overshadow Ctrl+E)
                 (KeyCode::Char(c), _) => {
                     if extension_mode {
                         extension_input.push(c);
                     } else {
                         search_input.push(c);
-                    }
-                }
-                // Ctrl+E => switch to or handle extension mode
-                (KeyCode::Char('e'), KeyModifiers::CONTROL) => {
-                    // If we're not already in extension mode, switch to it
-                    // and clear extension_input
-                    if !extension_mode {
-                        extension_mode = true;
-                        extension_input.clear();
-                    } else {
-                        // If we are *already* in extension mode and press Ctrl+E again,
-                        // maybe just exit extension mode
-                        extension_mode = false;
-                    }
-                }
-                // If user presses Enter *while in extension mode* => do fuzzy match for extension
-                (KeyCode::Enter, _) if extension_mode => {
-                    use fuzzy_matcher::FuzzyMatcher;
-                    let matcher = SkimMatcherV2::default();
-                    // If empty => do nothing
-                    if extension_input.is_empty() {
-                        extension_mode = false;
-                    } else {
-                        // Fuzzy match among all_exts
-                        let mut best_score = None;
-                        let mut best_ext = None;
-                        for ext in &all_exts {
-                            if let Some(score) = matcher.fuzzy_match(ext, &extension_input) {
-                                if best_score.map_or(true, |s| score > s) {
-                                    best_score = Some(score);
-                                    best_ext = Some(ext.clone());
-                                }
-                            }
-                        }
-                        // If we found a best match => select all items with that extension
-                        if let Some(ext_str) = best_ext {
-                            for (p, checked) in items.iter_mut() {
-                                if p.extension().map(|e| format!(".{}", e.to_string_lossy()))
-                                    == Some(ext_str.clone())
-                                {
-                                    *checked = true;
-                                }
-                            }
-                        }
-                        // Exit extension mode
-                        extension_mode = false;
                     }
                 }
                 _ => {}
