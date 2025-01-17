@@ -1,7 +1,11 @@
-use std::path::PathBuf;
-use std::collections::{HashSet, HashMap};
-use std::cmp::min;
-use std::fmt::Write as FmtWrite;
+use std::{
+    collections::{
+        HashMap,
+        HashSet,
+    },
+    fmt::Write as FmtWrite,
+    path::PathBuf,
+};
 
 use anyhow::Result;
 use crossterm::{
@@ -56,7 +60,7 @@ fn adjust_scroll_and_slice(
     selected_idx: &mut usize,
     scroll_offset: &mut usize,
     max_lines: usize,
-    data_len: usize
+    data_len: usize,
 ) -> (usize, usize) {
     // If selected_idx is above the current scroll, move scroll up
     if *selected_idx < *scroll_offset {
@@ -104,15 +108,19 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
         exts.sort();
         exts.dedup();
         // Now we sort by frequency in descending order
-        let mut with_counts: Vec<(String, usize)> = exts.into_iter().map(|e| {
-            let c = ext_counts.get(&e).cloned().unwrap_or(0);
-            (e, c)
-        }).collect();
+        let mut with_counts: Vec<(String, usize)> = exts
+            .into_iter()
+            .map(|e| {
+                let c = ext_counts.get(&e).cloned().unwrap_or(0);
+                (e, c)
+            })
+            .collect();
         // Sort by c descending
         with_counts.sort_by_key(|&(_, c)| std::cmp::Reverse(c));
 
         // Then build extension_items from that
-        with_counts.into_iter()
+        with_counts
+            .into_iter()
             .map(|(e, _freq)| (e, false))
             .collect()
     };
@@ -224,7 +232,8 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
             };
 
             let raw: Vec<(usize, String, bool)> = if extension_search.is_empty() {
-                extension_items.iter()
+                extension_items
+                    .iter()
                     .enumerate()
                     .map(|(i, (e, c))| (i, e.clone(), *c))
                     .collect()
@@ -247,9 +256,6 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
             vec![]
         };
 
-        // Sizing for the main list area
-        let size = terminal.size()?;
-
         // If in extension mode => ext_selected_idx logic
         if extension_mode && !ext_filtered.is_empty() && ext_selected_idx >= ext_filtered.len() {
             ext_selected_idx = ext_filtered.len().saturating_sub(1);
@@ -266,14 +272,13 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
 
         // Draw UI
         terminal.draw(|f| {
-            let size = f.size();
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
                     Constraint::Length(3), // for search input
                     Constraint::Min(1),    // for file list
                 ])
-                .split(size);
+                .split(f.size());
 
             let list_area = chunks[1];
             // The list area height determines how many lines we can show
@@ -281,8 +286,12 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
             // some extra margin for borders, adjust as needed
 
             // Use helper for normal mode scrolling
-            let (new_scroll, end_idx) =
-                adjust_scroll_and_slice(&mut selected_idx, &mut scroll_offset, max_lines, filtered.len());
+            let (new_scroll, _) = adjust_scroll_and_slice(
+                &mut selected_idx,
+                &mut scroll_offset,
+                max_lines,
+                filtered.len(),
+            );
 
             // (2) Show total # selected for normal mode
             let total_checked = items.iter().filter(|(_, c)| *c).count();
@@ -297,8 +306,11 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
                 &search_input
             };
 
-            let search_bar = Paragraph::new(input_str.as_str())
-                .block(Block::default().title(title_str.as_str()).borders(Borders::ALL));
+            let search_bar = Paragraph::new(input_str.as_str()).block(
+                Block::default()
+                    .title(title_str.as_str())
+                    .borders(Borders::ALL),
+            );
             f.render_widget(search_bar, chunks[0]);
 
             // If extension_mode => display extension list. Otherwise => display file list
@@ -445,10 +457,8 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
                     // So first gather ALL known ext -> are they chosen?
                     let union_mode = false; // set to true if user wants union
 
-                    let all_known_exts: HashSet<String> = extension_items
-                        .iter()
-                        .map(|(ext, _)| ext.clone())
-                        .collect();
+                    let all_known_exts: HashSet<String> =
+                        extension_items.iter().map(|(ext, _)| ext.clone()).collect();
 
                     // (1) Use our new helper:
                     apply_extension_items(&chosen_exts, &mut items, union_mode, &all_known_exts);
