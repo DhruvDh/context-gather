@@ -61,6 +61,18 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
     // State for fuzzy search input
     let mut search_input = String::new();
 
+    // Additional state for "extension filter mode"
+    let mut extension_mode = false;
+    let mut extension_input = String::new();
+
+    // A small helper to gather unique file extensions from items
+    let mut all_exts: Vec<String> = items
+        .iter()
+        .filter_map(|(p, _)| p.extension().map(|e| format!(".{}", e.to_string_lossy())))
+        .collect();
+    all_exts.sort();
+    all_exts.dedup();
+
     // Helper closure for filtering items
     let filter_items = |items: &[(PathBuf, bool)], search: &str| {
         // If nothing is typed, just return everything in original order:
@@ -139,8 +151,18 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
             let visible_slice = &filtered[scroll_offset..end_idx];
 
             // Draw search bar
-            let search_bar = Paragraph::new(search_input.as_ref())
-                .block(Block::default().title("Fuzzy Search").borders(Borders::ALL));
+            let title = if extension_mode {
+                "Extension Filter (press Enter to confirm)"
+            } else {
+                "Fuzzy Search"
+            };
+            let input_str = if extension_mode {
+                &extension_input
+            } else {
+                &search_input
+            };
+            let search_bar = Paragraph::new(input_str)
+                .block(Block::default().title(title).borders(Borders::ALL));
             f.render_widget(search_bar, chunks[0]);
 
             // Build list items from the visible slice only
@@ -238,7 +260,55 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
                 }
                 // Add typed character to fuzzy input
                 (KeyCode::Char(c), _) => {
-                    search_input.push(c);
+                    if extension_mode {
+                        extension_input.push(c);
+                    } else {
+                        search_input.push(c);
+                    }
+                }
+                // Ctrl+E => switch to or handle extension mode
+                (KeyCode::Char('e'), KeyModifiers::CONTROL) => {
+                    // If we're not already in extension mode, switch to it
+                    // and clear extension_input
+                    if !extension_mode {
+                        extension_mode = true;
+                        extension_input.clear();
+                    } else {
+                        // If we are *already* in extension mode and press Ctrl+E again,
+                        // maybe just exit extension mode
+                        extension_mode = false;
+                    }
+                }
+                // If user presses Enter *while in extension mode* => do fuzzy match for extension
+                (KeyCode::Enter, _) if extension_mode => {
+                    use fuzzy_matcher::FuzzyMatcher;
+                    let matcher = SkimMatcherV2::default();
+                    // If empty => do nothing
+                    if extension_input.is_empty() {
+                        extension_mode = false;
+                    } else {
+                        // Fuzzy match among all_exts
+                        let mut best_score = None;
+                        let mut best_ext = None;
+                        for ext in &all_exts {
+                            if let Some(score) = matcher.fuzzy_match(ext, &extension_input) {
+                                if best_score.map_or(true, |s| score > s) {
+                                    best_score = Some(score);
+                                    best_ext = Some(ext.clone());
+                                }
+                            }
+                        }
+                        // If we found a best match => select all items with that extension
+                        if let Some(ext_str) = best_ext {
+                            for (p, checked) in items.iter_mut() {
+                                if p.extension().map(|e| format!(".{}", e.to_string_lossy())) == Some(ext_str.clone()) {
+                                    *checked = true; 
+                                }
+                            }
+                        }
+                        // Exit extension mode
+                        extension_mode = false;
+                    }
                 }
                 _ => {}
             }
