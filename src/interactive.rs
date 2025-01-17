@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
+use fuzzy_matcher::{FuzzyMatcher, skim::SkimMatcherV2};
 use crossterm::{
     event::{
         self,
@@ -59,19 +60,31 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
 
     // Helper closure for filtering items
     let filter_items = |items: &[(PathBuf, bool)], search: &str| {
-        let search_lower = search.to_lowercase();
-        items
-            .iter()
-            .enumerate()
-            .filter_map(|(idx, (p, checked))| {
-                let path_str = p.to_string_lossy().to_lowercase();
-                if path_str.contains(&search_lower) {
-                    Some((idx, p.clone(), *checked))
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>()
+        // If nothing is typed, just return everything in original order:
+        if search.is_empty() {
+            return items
+                .iter()
+                .enumerate()
+                .map(|(idx, (p, checked))| (idx, p.clone(), *checked))
+                .collect::<Vec<_>>();
+        }
+
+        // Otherwise, do fuzzy matching with descending score
+        let matcher = SkimMatcherV2::default();
+        let mut results = Vec::new();
+
+        for (i, (p, checked)) in items.iter().enumerate() {
+            let path_str = p.to_string_lossy();
+            if let Some(score) = matcher.fuzzy_match(&path_str, search) {
+                results.push((i, p.clone(), *checked, score));
+            }
+        }
+
+        // Sort by score (descending)
+        results.sort_by_key(|&(_, _, _, score)| -score);
+
+        // Drop the score; return the triple
+        results.into_iter().map(|(i, p, c, _)| (i, p, c)).collect()
     };
 
     // Keep track of the currently selected index among filtered items
