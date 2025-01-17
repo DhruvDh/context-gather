@@ -210,6 +210,15 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
                     terminal.show_cursor()?;
                     return Ok(vec![]);
                 }
+                // Check for Ctrl+E before handling generic typed chars
+                (KeyCode::Char('e'), KeyModifiers::CONTROL) => {
+                    if !extension_mode {
+                        extension_mode = true;
+                        extension_input.clear();
+                    } else {
+                        extension_mode = false;
+                    }
+                }
                 // If extension_mode is active AND user presses Enter => do extension match
                 (KeyCode::Enter, _) if extension_mode => {
                     // Fuzzy match among all_exts
@@ -291,7 +300,7 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
                         search_input.pop();
                     }
                 }
-                // Add typed character to fuzzy input (must be last to not overshadow Ctrl+E)
+                // Finally, add typed character
                 (KeyCode::Char(c), _) => {
                     if extension_mode {
                         extension_input.push(c);
