@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 use std::collections::HashSet;
-use std::cmp::{min, max};
+use std::cmp::min;
 
 use anyhow::Result;
 use crossterm::{
@@ -403,7 +403,7 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
                 // If extension_mode, remove from extension_input; else from search_input
                 (KeyCode::Backspace, _) => {
                     if extension_mode {
-                        extension_input.pop();
+                        extension_search.pop();
                     } else {
                         search_input.pop();
                     }
@@ -411,7 +411,7 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
                 // Finally, add typed character
                 (KeyCode::Char(c), _) => {
                     if extension_mode {
-                        extension_input.push(c);
+                        extension_search.push(c);
                     } else {
                         search_input.push(c);
                     }
