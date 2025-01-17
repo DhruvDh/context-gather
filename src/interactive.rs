@@ -210,7 +210,35 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
                     terminal.show_cursor()?;
                     return Ok(vec![]);
                 }
-                // Done selecting
+                // If extension_mode is active AND user presses Enter => do extension match
+                (KeyCode::Enter, _) if extension_mode => {
+                    // Fuzzy match among all_exts
+                    let matcher = SkimMatcherV2::default();
+                    let mut best_score = None;
+                    let mut best_ext = None;
+                    if !extension_input.is_empty() {
+                        for ext in &all_exts {
+                            if let Some(score) = matcher.fuzzy_match(ext, &extension_input) {
+                                if best_score.is_none_or(|s| score > s) {
+                                    best_score = Some(score);
+                                    best_ext = Some(ext.clone());
+                                }
+                            }
+                        }
+                    }
+                    // If we found a best match => select all items with that extension
+                    if let Some(chosen_ext) = best_ext {
+                        for (p, checked) in items.iter_mut() {
+                            let p_ext = p.extension().map(|e| format!(".{}", e.to_string_lossy()));
+                            if p_ext.as_deref() == Some(chosen_ext.as_str()) {
+                                *checked = true;
+                            }
+                        }
+                    }
+                    // Exit extension mode
+                    extension_mode = false;
+                }
+                // Otherwise, if not in extension mode, Enter finalizes
                 (KeyCode::Enter, _) => {
                     disable_raw_mode()?;
                     execute!(
@@ -255,8 +283,13 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
                         items[*idx].1 = !items[*idx].1;
                     }
                 }
+                // If extension_mode, remove from extension_input; else from search_input
                 (KeyCode::Backspace, _) => {
-                    search_input.pop();
+                    if extension_mode {
+                        extension_input.pop();
+                    } else {
+                        search_input.pop();
+                    }
                 }
                 // Add typed character to fuzzy input (must be last to not overshadow Ctrl+E)
                 (KeyCode::Char(c), _) => {
