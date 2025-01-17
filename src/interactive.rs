@@ -1,4 +1,6 @@
 use std::path::PathBuf;
+use std::collections::HashSet;
+use std::cmp::{min, max};
 
 use anyhow::Result;
 use crossterm::{
@@ -61,17 +63,26 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
     // State for fuzzy search input
     let mut search_input = String::new();
 
-    // Additional state for "extension filter mode"
+    // ---------------------------
+    // EXTENSION MODE STATE
+    // ---------------------------
     let mut extension_mode = false;
-    let mut extension_input = String::new();
-
-    // A small helper to gather unique file extensions from items
-    let mut all_exts: Vec<String> = items
-        .iter()
-        .filter_map(|(p, _)| p.extension().map(|e| format!(".{}", e.to_string_lossy())))
-        .collect();
-    all_exts.sort();
-    all_exts.dedup();
+    // extension_items: (ext_string, checked)
+    let mut extension_items: Vec<(String, bool)> = {
+        let mut exts: Vec<String> = items
+            .iter()
+            .filter_map(|(p, _)| p.extension().map(|e| format!(".{}", e.to_string_lossy())))
+            .collect();
+        exts.sort();
+        exts.dedup();
+        exts.into_iter().map(|e| (e, false)).collect()
+    };
+    // We'll also maintain an extension search input
+    let mut extension_search = String::new();
+    // Index for which extension is highlighted in extension mode
+    let mut ext_selected_idx = 0usize;
+    // Scrolling offset for extension list
+    let mut ext_scroll_offset = 0usize;
 
     // Helper closure for filtering items
     let filter_items = |items: &[(PathBuf, bool)], search: &str| {
@@ -115,12 +126,56 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
 
     // Main loop
     loop {
-        // Recompute filtered list each frame
-        let filtered = filter_items(&items, &search_input);
-        if filtered.is_empty() {
-            selected_idx = 0;
-        } else if selected_idx >= filtered.len() {
-            selected_idx = filtered.len() - 1;
+        // If NOT in extension mode, compute filtered files
+        let filtered = if !extension_mode {
+            filter_items(&items, &search_input)
+        } else {
+            // if extension_mode is active, we skip "file list" logic
+            vec![]
+        };
+
+        // If we *are* in extension mode, let's do fuzzy matching over extension_items
+        let ext_filtered = if extension_mode {
+            if extension_search.is_empty() {
+                extension_items
+                    .iter()
+                    .enumerate()
+                    .map(|(i, (e, c))| (i, e.clone(), *c))
+                    .collect::<Vec<_>>()
+            } else {
+                let matcher = SkimMatcherV2::default();
+                let mut results = Vec::new();
+                for (i, (ext, checked)) in extension_items.iter().enumerate() {
+                    if let Some(score) = matcher.fuzzy_match(ext, &extension_search) {
+                        results.push((i, ext.clone(), *checked, score));
+                    }
+                }
+                results.sort_by_key(|&(_, _, _, score)| -score);
+                results.into_iter().map(|(i, e, c, _)| (i, e, c)).collect()
+            }
+        } else {
+            // if not in extension mode, no ext list
+            vec![]
+        };
+
+        // Sizing for the main list area
+        let size = terminal.size()?;
+        let max_lines = size.height.saturating_sub(4) as usize; // approx for the list
+
+        // If in extension mode => ext_selected_idx logic
+        if extension_mode && !ext_filtered.is_empty() {
+            if ext_selected_idx >= ext_filtered.len() {
+                ext_selected_idx = ext_filtered.len().saturating_sub(1);
+            }
+        }
+
+        // If NOT extension mode => normal selected_idx logic
+        if !extension_mode {
+            if filtered.is_empty() {
+                selected_idx = 0;
+            } else if selected_idx >= filtered.len() {
+                selected_idx = filtered.len() - 1;
+            }
         }
 
         // Draw UI
@@ -150,45 +205,87 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
             let end_idx = (scroll_offset + max_lines).min(filtered.len());
             let visible_slice = &filtered[scroll_offset..end_idx];
 
-            // Draw search bar
-            let title = if extension_mode {
-                "Extension Filter (press Enter to confirm)"
+            // Depending on extension_mode => we show a different "title" & input
+            let (title, input_str) = if extension_mode {
+                ("Extensions (Ctrl+E to exit, Enter to confirm)", &extension_search)
             } else {
-                "Fuzzy Search"
+                ("Fuzzy Search", &search_input)
             };
-            let input_str = if extension_mode {
-                &extension_input
-            } else {
-                &search_input
-            };
+
             let search_bar = Paragraph::new(input_str.as_str())
                 .block(Block::default().title(title).borders(Borders::ALL));
             f.render_widget(search_bar, chunks[0]);
 
-            // Build list items from the visible slice only
-            let list_items: Vec<ListItem> = visible_slice
-                .iter()
-                .enumerate()
-                .map(|(i, (_idx_p, path, checked))| {
-                    let mark = if *checked { "[x]" } else { "[ ]" };
-                    let line = format!("{} {}", mark, path.display());
-                    // The index for display is i + scroll_offset
-                    let displayed_idx = i + scroll_offset;
-                    if displayed_idx == selected_idx {
-                        // highlight selected
-                        ListItem::new(Spans::from(vec![Span::styled(
-                            line,
-                            Style::default().fg(Color::Yellow),
-                        )]))
-                    } else {
-                        ListItem::new(Spans::from(line))
-                    }
-                })
-                .collect();
+            // If extension_mode => display extension list. Otherwise => display file list
+            if extension_mode {
+                // We'll do the same "scroll offset" pattern => ext_scroll_offset
+                let list_area = chunks[1];
+                let max_lines = list_area.height.saturating_sub(2) as usize;
 
-            let files_list =
-                List::new(list_items).block(Block::default().title("Files").borders(Borders::ALL));
-            f.render_widget(files_list, chunks[1]);
+                if ext_selected_idx < ext_scroll_offset {
+                    ext_scroll_offset = ext_selected_idx;
+                } else if ext_selected_idx >= ext_scroll_offset + max_lines {
+                    ext_scroll_offset = ext_selected_idx.saturating_sub(max_lines).saturating_add(1);
+                }
+                let end_idx = min(ext_scroll_offset + max_lines, ext_filtered.len());
+                let slice = &ext_filtered[ext_scroll_offset..end_idx];
+
+                // build items
+                let list_items: Vec<ListItem> = slice
+                    .iter()
+                    .enumerate()
+                    .map(|(i, (orig_idx, ext_string, is_checked))| {
+                        let displayed_idx = i + ext_scroll_offset;
+                        let mark = if *is_checked { "[x]" } else { "[ ]" };
+                        let line = format!("{} {}", mark, ext_string);
+                        if displayed_idx == ext_selected_idx {
+                            ListItem::new(Spans::from(vec![Span::styled(
+                                line,
+                                Style::default().fg(Color::Yellow),
+                            )]))
+                        } else {
+                            ListItem::new(Spans::from(line))
+                        }
+                    })
+                    .collect();
+
+                let ext_list = List::new(list_items)
+                    .block(Block::default().title("Extensions").borders(Borders::ALL));
+                f.render_widget(ext_list, chunks[1]);
+            } else {
+                // normal file list
+                let list_area = chunks[1];
+                let max_lines = list_area.height.saturating_sub(2) as usize;
+                if selected_idx < scroll_offset {
+                    scroll_offset = selected_idx;
+                } else if selected_idx >= scroll_offset + max_lines {
+                    scroll_offset = selected_idx.saturating_sub(max_lines).saturating_add(1);
+                }
+                let end_idx = (scroll_offset + max_lines).min(filtered.len());
+                let visible_slice = &filtered[scroll_offset..end_idx];
+
+                let list_items: Vec<ListItem> = visible_slice
+                    .iter()
+                    .enumerate()
+                    .map(|(i, (_idx_p, path, checked))| {
+                        let displayed_idx = i + scroll_offset;
+                        let mark = if *checked { "[x]" } else { "[ ]" };
+                        let line = format!("{} {}", mark, path.display());
+                        if displayed_idx == selected_idx {
+                            ListItem::new(Spans::from(vec![Span::styled(
+                                line,
+                                Style::default().fg(Color::Yellow),
+                            )]))
+                        } else {
+                            ListItem::new(Spans::from(line))
+                        }
+                    })
+                    .collect();
+
+                let files_list = List::new(list_items)
+                    .block(Block::default().title("Files").borders(Borders::ALL));
+                f.render_widget(files_list, chunks[1]);
+            }
         })?;
 
         // Handle input
