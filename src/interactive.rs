@@ -160,13 +160,10 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
 
         // Sizing for the main list area
         let size = terminal.size()?;
-        let max_lines = size.height.saturating_sub(4) as usize; // approx for the list
 
         // If in extension mode => ext_selected_idx logic
-        if extension_mode && !ext_filtered.is_empty() {
-            if ext_selected_idx >= ext_filtered.len() {
-                ext_selected_idx = ext_filtered.len().saturating_sub(1);
-            }
+        if extension_mode && !ext_filtered.is_empty() && ext_selected_idx >= ext_filtered.len() {
+            ext_selected_idx = ext_filtered.len().saturating_sub(1);
         }
 
         // If NOT extension mode => normal selected_idx logic
@@ -203,7 +200,6 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
 
             // We'll slice the filtered items for drawing
             let end_idx = (scroll_offset + max_lines).min(filtered.len());
-            let visible_slice = &filtered[scroll_offset..end_idx];
 
             // Depending on extension_mode => we show a different "title" & input
             let (title, input_str) = if extension_mode {
@@ -234,7 +230,7 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
                 let list_items: Vec<ListItem> = slice
                     .iter()
                     .enumerate()
-                    .map(|(i, (orig_idx, ext_string, is_checked))| {
+                    .map(|(i, (_orig_idx, ext_string, is_checked))| {
                         let displayed_idx = i + ext_scroll_offset;
                         let mark = if *is_checked { "[x]" } else { "[ ]" };
                         let line = format!("{} {}", mark, ext_string);
@@ -323,7 +319,7 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
                 }
                 // Space toggles extension check if extension_mode
                 (KeyCode::Char(' '), _) if extension_mode => {
-                    if let Some((orig_idx, _ext, c)) = ext_filtered.get(ext_selected_idx) {
+                    if let Some((orig_idx, _ext, _)) = ext_filtered.get(ext_selected_idx) {
                         extension_items[*orig_idx].1 = !extension_items[*orig_idx].1;
                     }
                 }
