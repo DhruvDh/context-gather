@@ -307,20 +307,54 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
                     terminal.show_cursor()?;
                     return Ok(vec![]);
                 }
-                // Check for Ctrl+E before handling generic typed chars
+                // Toggle extension mode
                 (KeyCode::Char('e'), KeyModifiers::CONTROL) => {
-                    if !extension_mode {
-                        extension_mode = true;
-                        extension_input.clear();
-                    } else {
-                        extension_mode = false;
+                    extension_mode = !extension_mode;
+                }
+
+                // If extension_mode => up/down move ext_selected_idx
+                (KeyCode::Up, _) if extension_mode => {
+                    ext_selected_idx = ext_selected_idx.saturating_sub(1);
+                }
+                (KeyCode::Down, _) if extension_mode => {
+                    if !ext_filtered.is_empty() && ext_selected_idx < ext_filtered.len() - 1 {
+                        ext_selected_idx += 1;
                     }
                 }
-                // If extension_mode is active AND user presses Enter => do extension match
+                // Space toggles extension check if extension_mode
+                (KeyCode::Char(' '), _) if extension_mode => {
+                    if let Some((orig_idx, _ext, c)) = ext_filtered.get(ext_selected_idx) {
+                        extension_items[*orig_idx].1 = !extension_items[*orig_idx].1;
+                    }
+                }
+                // If extension_mode => pressing Enter => apply extension checks to items
                 (KeyCode::Enter, _) if extension_mode => {
-                    // Fuzzy match among all_exts
-                    let matcher = SkimMatcherV2::default();
-                    let mut best_score = None;
+                    // gather all extension_items that are checked
+                    let chosen_exts: HashSet<String> = extension_items
+                        .iter()
+                        .filter_map(|(ext, c)| if *c { Some(ext.clone()) } else { None })
+                        .collect();
+
+                    // Mark items checked if they have one of the chosen extensions
+                    // or if they were already checked
+                    for (p, checked) in items.iter_mut() {
+                        let p_ext = p.extension().map(|e| format!(".{}", e.to_string_lossy()));
+                        if let Some(ext_str) = p_ext {
+                            if chosen_exts.contains(&ext_str) {
+                                *checked = true;
+                            }
+                        }
+                    }
+                    // exit extension mode
+                    extension_mode = false;
+                }
+                // If extension_mode => typed char goes to extension_search
+                (KeyCode::Backspace, _) if extension_mode => {
+                    extension_search.pop();
+                }
+                (KeyCode::Char(c), _) if extension_mode => {
+                    extension_search.push(c);
+                }
                     let mut best_ext = None;
                     if !extension_input.is_empty() {
                         for ext in &all_exts {
