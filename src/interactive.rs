@@ -182,7 +182,10 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
                 }
                 results.sort_by_key(|&(_, _, _, score)| -score);
                 results.into_iter().map(|(i, e, c, _)| (i, e, c)).collect()
-            }
+            };
+
+            // transform them so we show "ext (count)" in UI
+            raw.into_iter().map(to_list).collect()
         } else {
             // if not in extension mode, no ext list
             vec![]
