@@ -51,6 +51,26 @@ use tui::{
     },
 };
 
+// Helper function for scrolling logic
+fn adjust_scroll_and_slice(
+    selected_idx: &mut usize,
+    scroll_offset: &mut usize,
+    max_lines: usize,
+    data_len: usize
+) -> (usize, usize) {
+    // If selected_idx is above the current scroll, move scroll up
+    if *selected_idx < *scroll_offset {
+        *scroll_offset = *selected_idx;
+    }
+    // If selected_idx is below the current view, scroll down
+    else if *selected_idx >= *scroll_offset + max_lines {
+        *scroll_offset = selected_idx.saturating_sub(max_lines).saturating_add(1);
+    }
+    // Compute the end index for the visible slice
+    let end_idx = (*scroll_offset + max_lines).min(data_len);
+    (*scroll_offset, end_idx)
+}
+
 pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<Vec<PathBuf>> {
     // Mark items as checked if they're in `preselected`
     let mut items: Vec<(PathBuf, bool)> = paths
@@ -260,15 +280,9 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
             let max_lines = list_area.height.saturating_sub(2) as usize;
             // some extra margin for borders, adjust as needed
 
-            // Adjust scroll_offset so selected_idx is always in view
-            if selected_idx < scroll_offset {
-                scroll_offset = selected_idx;
-            } else if selected_idx >= scroll_offset + max_lines {
-                scroll_offset = selected_idx.saturating_sub(max_lines).saturating_add(1);
-            }
-
-            // We'll slice the filtered items for drawing
-            let end_idx = (scroll_offset + max_lines).min(filtered.len());
+            // Use helper for normal mode scrolling
+            let (new_scroll, end_idx) =
+                adjust_scroll_and_slice(&mut selected_idx, &mut scroll_offset, max_lines, filtered.len());
 
             // (2) Show total # selected for normal mode
             let total_checked = items.iter().filter(|(_, c)| *c).count();
