@@ -38,8 +38,7 @@ pub fn build_xml(files: &[FileContents]) -> String {
             path_str, file_name
         ));
         // Indent file contents for readability, or just dump them as-is
-        let escaped_contents = escape_special_chars(&file.contents);
-        output.push_str(&format!("{}\n", escaped_contents));
+        output.push_str(&format!("{}\n", file.contents));
         output.push_str("    </file-contents>\n");
     }
 
@@ -50,12 +49,4 @@ pub fn build_xml(files: &[FileContents]) -> String {
 
     // Wrap everything in a top-level XML-ish tag for clarity
     format!("<current-context>\n{}\n</current-context>", output)
-}
-
-/// Escape special characters if needed (optional)
-fn escape_special_chars(s: &str) -> String {
-    // Very naive example:
-    s.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
 }
