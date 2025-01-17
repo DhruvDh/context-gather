@@ -68,14 +68,6 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
     // EXTENSION MODE STATE
     // ---------------------------
     let mut extension_mode = false;
-    
-    // Build a map: extension -> how many files have this extension
-    let mut ext_counts: HashMap<String, usize> = HashMap::new();
-    for (p, _) in &items {
-        if let Some(ext) = p.extension().map(|e| format!(".{}", e.to_string_lossy())) {
-            *ext_counts.entry(ext).or_insert(0) += 1;
-        }
-    }
 
     // extension_items: (ext_string, checked)
     let mut extension_items: Vec<(String, bool)> = {
@@ -116,6 +108,32 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
     let reset_ext_on_toggle = true;
     // Store the old search_input here if we want to restore
     let mut saved_search_input = String::new();
+
+    // ---------------------------------------------------
+    // (1) FACTOR OUT EXTENSION-TOGGLING INTO A HELPER
+    // ---------------------------------------------------
+    fn apply_extension_items(
+        chosen_exts: &HashSet<String>,
+        items: &mut [(PathBuf, bool)],
+        union_mode: bool,
+        all_known_exts: &HashSet<String>,
+    ) {
+        for (p, checked) in items.iter_mut() {
+            if let Some(pext) = p.extension().map(|e| format!(".{}", e.to_string_lossy())) {
+                if all_known_exts.contains(&pext) {
+                    if union_mode {
+                        // Just set to true if chosen_exts has it, else keep old
+                        if chosen_exts.contains(&pext) {
+                            *checked = true;
+                        }
+                    } else {
+                        // The existing "replace" logic
+                        *checked = chosen_exts.contains(&pext);
+                    }
+                }
+            }
+        }
+    }
 
     // Helper closure for filtering items
     let filter_items = |items: &[(PathBuf, bool)], search: &str| {
@@ -254,11 +272,18 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
             // We'll slice the filtered items for drawing
             let end_idx = (scroll_offset + max_lines).min(filtered.len());
 
-            // Depending on extension_mode => we show a different "title" & input
+            // (2) Show total # selected for normal mode
+            let total_checked = items.iter().filter(|(_, c)| *c).count();
+
+            // We'll incorporate that into the top bar's title if NOT extension mode
             let (title, input_str) = if extension_mode {
                 ("Extensions (Ctrl+E to exit, Enter to confirm)", &extension_search)
             } else {
-                ("Fuzzy Search", &search_input)
+                // Example: "Fuzzy Search (3 selected)"
+                let mut top_title = String::new();
+                use std::fmt::Write as _;
+                write!(&mut top_title, "Fuzzy Search ({} selected)", total_checked).ok();
+                (top_title.as_str(), &search_input)
             };
 
             let search_bar = Paragraph::new(input_str.as_str())
@@ -413,21 +438,8 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
                         .map(|(ext, _)| ext.clone())
                         .collect();
 
-                    for (p, checked) in items.iter_mut() {
-                        if let Some(pext) = p.extension().map(|e| format!(".{}", e.to_string_lossy())) {
-                            if all_known_exts.contains(&pext) {
-                                if union_mode {
-                                    // Just set to true if chosen_exts has it, else keep old
-                                    if chosen_exts.contains(&pext) {
-                                        *checked = true;
-                                    }
-                                } else {
-                                    // The existing logic: if it's in known exts, override with whether chosen_exts has it
-                                    *checked = chosen_exts.contains(&pext);
-                                }
-                            }
-                        }
-                    }
+                    // (1) Use our new helper:
+                    apply_extension_items(&chosen_exts, &mut items, union_mode, &all_known_exts);
                     // exit extension mode
                     extension_mode = false;
                 }
