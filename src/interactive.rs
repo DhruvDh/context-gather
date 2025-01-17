@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 use std::cmp::min;
 
 use anyhow::Result;
@@ -83,6 +83,10 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
     let mut ext_selected_idx = 0usize;
     // Scrolling offset for extension list
     let mut ext_scroll_offset = 0usize;
+    // Control whether extension selections reset when toggling mode
+    let reset_ext_on_toggle = true;
+    // Store the old search_input here if we want to restore
+    let mut saved_search_input = String::new();
 
     // Helper closure for filtering items
     let filter_items = |items: &[(PathBuf, bool)], search: &str| {
@@ -305,7 +309,26 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
                 }
                 // Toggle extension mode
                 (KeyCode::Char('e'), KeyModifiers::CONTROL) => {
-                    extension_mode = !extension_mode;
+                    if !extension_mode {
+                        // We are ENTERING extension mode
+                        // Save the old search input in case we want to restore it
+                        saved_search_input = search_input.clone();
+                        // Clear the main search and rely on extension_search now
+                        search_input.clear();
+                        extension_mode = true;
+                        if reset_ext_on_toggle {
+                            // Clear all extension checks & extension search
+                            for (_, is_checked) in extension_items.iter_mut() {
+                                *is_checked = false;
+                            }
+                            extension_search.clear();
+                        }
+                    } else {
+                        // We are EXITING extension mode
+                        // Optionally restore the old search
+                        search_input = saved_search_input.clone();
+                        extension_mode = false;
+                    }
                 }
 
                 // If extension_mode => up/down move ext_selected_idx
@@ -331,13 +354,19 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
                         .filter_map(|(ext, c)| if *c { Some(ext.clone()) } else { None })
                         .collect();
 
-                    // Mark items checked if they have one of the chosen extensions
-                    // or if they were already checked
+                    // Instead, let's REPLACE the checks for those file extensions only:
+                    // i.e. if an extension is now unchecked, we un-check matching items
+                    // So first gather ALL known ext -> are they chosen?
+                    let all_known_exts: HashSet<String> = extension_items
+                        .iter()
+                        .map(|(ext, _)| ext.clone())
+                        .collect();
+
                     for (p, checked) in items.iter_mut() {
-                        let p_ext = p.extension().map(|e| format!(".{}", e.to_string_lossy()));
-                        if let Some(ext_str) = p_ext {
-                            if chosen_exts.contains(&ext_str) {
-                                *checked = true;
+                        if let Some(pext) = p.extension().map(|e| format!(".{}", e.to_string_lossy())) {
+                            // If it's in the full set of known exts, we override
+                            if all_known_exts.contains(&pext) {
+                                *checked = chosen_exts.contains(&pext);
                             }
                         }
                     }
