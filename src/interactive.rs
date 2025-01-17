@@ -301,8 +301,10 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
                         // If we found a best match => select all items with that extension
                         if let Some(ext_str) = best_ext {
                             for (p, checked) in items.iter_mut() {
-                                if p.extension().map(|e| format!(".{}", e.to_string_lossy())) == Some(ext_str.clone()) {
-                                    *checked = true; 
+                                if p.extension().map(|e| format!(".{}", e.to_string_lossy()))
+                                    == Some(ext_str.clone())
+                                {
+                                    *checked = true;
                                 }
                             }
                         }
