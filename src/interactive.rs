@@ -228,7 +228,7 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
         };
 
         // Sizing for the main list area
-        let _size = terminal.size()?;
+        let size = terminal.size()?;
 
         // If in extension mode => ext_selected_idx logic
         if extension_mode && !ext_filtered.is_empty() && ext_selected_idx >= ext_filtered.len() {
@@ -246,7 +246,7 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
 
         // Draw UI
         terminal.draw(|f| {
-            let _size = f.size();
+            let size = f.size();
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
@@ -284,7 +284,7 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
             };
 
             let search_bar = Paragraph::new(input_str.as_str())
-                .block(Block::default().title(&title_str).borders(Borders::ALL));
+                .block(Block::default().title(title_str.as_str()).borders(Borders::ALL));
             f.render_widget(search_bar, chunks[0]);
 
             // If extension_mode => display extension list. Otherwise => display file list
