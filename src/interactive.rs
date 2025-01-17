@@ -293,20 +293,21 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
                 let list_area = chunks[1];
                 let max_lines = list_area.height.saturating_sub(2) as usize;
 
-                if ext_selected_idx < ext_scroll_offset {
-                    ext_scroll_offset = ext_selected_idx;
-                } else if ext_selected_idx >= ext_scroll_offset + max_lines {
-                    ext_scroll_offset = ext_selected_idx.saturating_sub(max_lines).saturating_add(1);
-                }
-                let end_idx = min(ext_scroll_offset + max_lines, ext_filtered.len());
-                let slice = &ext_filtered[ext_scroll_offset..end_idx];
+                // Use helper for extension mode scrolling
+                let (new_ext_scroll, ext_end_idx) = adjust_scroll_and_slice(
+                    &mut ext_selected_idx,
+                    &mut ext_scroll_offset,
+                    max_lines,
+                    ext_filtered.len(),
+                );
+                let slice = &ext_filtered[new_ext_scroll..ext_end_idx];
 
                 // build items
                 let list_items: Vec<ListItem> = slice
                     .iter()
                     .enumerate()
                     .map(|(i, (_orig_idx, ext_string, is_checked))| {
-                        let displayed_idx = i + ext_scroll_offset;
+                        let displayed_idx = i + new_ext_scroll;
                         let mark = if *is_checked { "[x]" } else { "[ ]" };
                         let line = format!("{} {}", mark, ext_string);
                         if displayed_idx == ext_selected_idx {
@@ -333,13 +334,13 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
                     scroll_offset = selected_idx.saturating_sub(max_lines).saturating_add(1);
                 }
                 let end_idx = (scroll_offset + max_lines).min(filtered.len());
-                let visible_slice = &filtered[scroll_offset..end_idx];
+                let visible_slice = &filtered[new_scroll..end_idx];
 
                 let list_items: Vec<ListItem> = visible_slice
                     .iter()
                     .enumerate()
                     .map(|(i, (_idx_p, path, checked))| {
-                        let displayed_idx = i + scroll_offset;
+                        let displayed_idx = i + new_scroll;
                         let mark = if *checked { "[x]" } else { "[ ]" };
                         let line = format!("{} {}", mark, path.display());
                         if displayed_idx == selected_idx {
