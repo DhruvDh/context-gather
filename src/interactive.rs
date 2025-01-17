@@ -76,6 +76,7 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
 
     // Keep track of the currently selected index among filtered items
     let mut selected_idx = 0usize;
+    let mut scroll_offset = 0usize; // which line in `filtered` we start rendering from
 
     // Setup terminal
     enable_raw_mode()?;
@@ -105,19 +106,37 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
                 ])
                 .split(size);
 
+            let list_area = chunks[1];
+            // The list area height determines how many lines we can show
+            let max_lines = list_area.height.saturating_sub(2) as usize; 
+            // some extra margin for borders, adjust as needed
+
+            // Adjust scroll_offset so selected_idx is always in view
+            if selected_idx < scroll_offset {
+                scroll_offset = selected_idx;
+            } else if selected_idx >= scroll_offset + max_lines {
+                scroll_offset = selected_idx.saturating_sub(max_lines).saturating_add(1);
+            }
+
+            // We'll slice the filtered items for drawing
+            let end_idx = (scroll_offset + max_lines).min(filtered.len());
+            let visible_slice = &filtered[scroll_offset..end_idx];
+
             // Draw search bar
             let search_bar = Paragraph::new(search_input.as_ref())
                 .block(Block::default().title("Fuzzy Search").borders(Borders::ALL));
             f.render_widget(search_bar, chunks[0]);
 
-            // Build list items
-            let list_items: Vec<ListItem> = filtered
+            // Build list items from the visible slice only
+            let list_items: Vec<ListItem> = visible_slice
                 .iter()
                 .enumerate()
                 .map(|(i, (_idx_p, path, checked))| {
                     let mark = if *checked { "[x]" } else { "[ ]" };
                     let line = format!("{} {}", mark, path.display());
-                    if i == selected_idx {
+                    // The index for display is i + scroll_offset
+                    let displayed_idx = i + scroll_offset;
+                    if displayed_idx == selected_idx {
                         // highlight selected
                         ListItem::new(Spans::from(vec![Span::styled(
                             line,
@@ -172,8 +191,8 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
                 (KeyCode::Up, _) => {
                     selected_idx = selected_idx.saturating_sub(1);
                 }
-                (KeyCode::Down, _) => {
-                    if selected_idx + 1 < filtered.len() {
+                (KeyCode::Down, _) => { 
+                    if !filtered.is_empty() && selected_idx < filtered.len() - 1 {
                         selected_idx += 1;
                     }
                 }
