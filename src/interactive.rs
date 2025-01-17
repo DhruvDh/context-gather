@@ -161,7 +161,7 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
             } else {
                 &search_input
             };
-            let search_bar = Paragraph::new(input_str)
+            let search_bar = Paragraph::new(input_str.as_str())
                 .block(Block::default().title(title).borders(Borders::ALL));
             f.render_widget(search_bar, chunks[0]);
 
