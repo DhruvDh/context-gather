@@ -355,29 +355,6 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
                 (KeyCode::Char(c), _) if extension_mode => {
                     extension_search.push(c);
                 }
-                    let mut best_ext = None;
-                    if !extension_input.is_empty() {
-                        for ext in &all_exts {
-                            if let Some(score) = matcher.fuzzy_match(ext, &extension_input) {
-                                if best_score.is_none_or(|s| score > s) {
-                                    best_score = Some(score);
-                                    best_ext = Some(ext.clone());
-                                }
-                            }
-                        }
-                    }
-                    // If we found a best match => select all items with that extension
-                    if let Some(chosen_ext) = best_ext {
-                        for (p, checked) in items.iter_mut() {
-                            let p_ext = p.extension().map(|e| format!(".{}", e.to_string_lossy()));
-                            if p_ext.as_deref() == Some(chosen_ext.as_str()) {
-                                *checked = true;
-                            }
-                        }
-                    }
-                    // Exit extension mode
-                    extension_mode = false;
-                }
                 // Otherwise, if not in extension mode, Enter finalizes
                 (KeyCode::Enter, _) => {
                     disable_raw_mode()?;
