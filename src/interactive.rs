@@ -82,6 +82,14 @@ pub fn select_files_tui(paths: Vec<PathBuf>, preselected: &[PathBuf]) -> Result<
     let mut extension_search = String::new();
     // Index for which extension is highlighted in extension mode
     let mut ext_selected_idx = 0usize;
+    
+    // Build a map: extension -> how many files have this extension
+    let mut ext_counts: HashMap<String, usize> = HashMap::new();
+    for (p, _) in &items {
+        if let Some(ext) = p.extension().map(|e| format!(".{}", e.to_string_lossy())) {
+            *ext_counts.entry(ext).or_insert(0) += 1;
+        }
+    }
     // Scrolling offset for extension list
     let mut ext_scroll_offset = 0usize;
     // Control whether extension selections reset when toggling mode
