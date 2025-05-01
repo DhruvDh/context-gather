@@ -191,7 +191,7 @@ pub fn select_files_tui(paths: Vec<PathBuf>,
                 if let Some(count) = ext_counts.get(ext) {
                     let mut s = String::new();
                     // e.g. ".rs (12)"
-                    let _ = write!(s, "{} ({})", ext, count);
+                    let _ = write!(s, "{ext} ({count})");
                     s
                 } else {
                     ext.to_owned()
@@ -270,7 +270,7 @@ pub fn select_files_tui(paths: Vec<PathBuf>,
                         title_str.push_str("Extensions (Ctrl+E to exit, Enter to confirm)");
                         &extension_search
                     } else {
-                        write!(title_str, "Fuzzy Search ({} selected)", total_checked).ok();
+                        write!(title_str, "Fuzzy Search ({total_checked} selected)").ok();
                         &search_input
                     };
 
@@ -302,7 +302,7 @@ pub fn select_files_tui(paths: Vec<PathBuf>,
                                  .map(|(i, (_orig_idx, ext_string, is_checked))| {
                                      let displayed_idx = i + new_ext_scroll;
                                      let mark = if *is_checked { "[x]" } else { "[ ]" };
-                                     let line = format!("{} {}", mark, ext_string);
+                                     let line = format!("{mark} {ext_string}");
                                      if displayed_idx == ext_selected_idx {
                                          ListItem::new(Spans::from(vec![Span::styled(
                                 line,
@@ -337,7 +337,8 @@ pub fn select_files_tui(paths: Vec<PathBuf>,
                                          .map(|(i, (_idx_p, path, checked))| {
                                              let displayed_idx = i + new_scroll;
                                              let mark = if *checked { "[x]" } else { "[ ]" };
-                                             let line = format!("{} {}", mark, path.display());
+                                             let path_display = path.display();
+                                             let line = format!("{mark} {path_display}");
                                              if displayed_idx == selected_idx {
                                                  ListItem::new(Spans::from(vec![Span::styled(
                                 line,

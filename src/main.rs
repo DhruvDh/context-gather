@@ -9,7 +9,6 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::Parser;
 use cli::Cli;
-use dunce;
 use glob::Pattern;
 use path_slash::PathBufExt;
 
@@ -68,7 +67,13 @@ fn main() -> Result<()> {
 
     // 4) If interactive, open the TUI
     if cli.interactive {
-        candidate_files = interactive::select_files_tui(candidate_files, &preselected_paths)?;
+        candidate_files = match interactive::select_files_tui(candidate_files, &preselected_paths) {
+            Ok(selected) => selected,
+            Err(e) => {
+                eprintln!("Error in interactive TUI: {e}");
+                std::process::exit(1);
+            }
+        };
     }
 
     // 5) Exclude patterns: abort if all provided globs are invalid
@@ -97,7 +102,7 @@ fn main() -> Result<()> {
         clipboard::copy_to_clipboard(&xml_output, true)?;
     }
     if cli.stdout {
-        println!("{}", xml_output);
+        println!("{xml_output}");
     }
     // 8) Count tokens and print summary
     let token_count = gather::count_tokens(&xml_output);
@@ -112,8 +117,7 @@ fn main() -> Result<()> {
     // 9) Warn if token count exceeds model context limit
     if let Some(limit) = cli.model_context {
         if token_count > limit {
-            eprintln!("Warning: token count {} exceeds model context limit {}",
-                      token_count, limit);
+            eprintln!("Warning: token count {token_count} exceeds model context limit {limit}");
         }
     }
 

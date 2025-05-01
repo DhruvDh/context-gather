@@ -62,7 +62,7 @@ pub fn gather_all_file_paths(paths: &[PathBuf]) -> Result<Vec<PathBuf>> {
                     }
                 }
                 Err(e) => {
-                    eprintln!("Warning: Could not process entry in {:?}: {:?}", path, e);
+                    eprintln!("Warning: Could not process entry in {path:?}: {e:?}");
                 }
             }
         }
@@ -82,7 +82,7 @@ pub fn collect_file_data(file_paths: &[PathBuf],
     for path in file_paths {
         match read_file(path, max_size) {
             Ok(fc) => results.push(fc),
-            Err(e) => eprintln!("{}", e),
+            Err(e) => eprintln!("{e}"),
         }
     }
     // Sort by folder then file name
