@@ -1,6 +1,15 @@
 # `context-gather`
 
-Below is a step-by-step outline for implementing a `context-gather` Rust CLI tool that meets your specifications. It’s designed to do the following:
+# `context-gather` is a Rust CLI tool for gathering file contexts across folders, grouping them into XML-like output, copying to clipboard, and token counting
+
+Install with Rust 1.85 stable (Edition 2024):
+
+```bash
+rustup default 1.85.0
+cargo install context-gather
+```
+
+Below is a step-by-step outline for using and extending `context-gather`. It’s designed to do the following:
 
 1. **Accept file paths (and glob patterns) on the command line.**  
 2. **Optionally open a TUI** for interactive file selection when a flag (e.g., `-i` or `--interactive`) is used.  
@@ -321,7 +330,7 @@ fn escape_special_chars(s: &str) -> String {
 }
 ```
 
-Note that escaping may be helpful if you want to ensure valid XML. You can skip it if it’s purely for an LLM “context” use case and you’re confident the LLM can handle angle brackets.
+Note that escaping may be helpful if you want to ensure valid XML. You can skip it if it’s purely for an LLM "context" use case and you're confident the LLM can handle angle brackets.
 
 ## 8. Clipboard Integration (in `clipboard.rs`)
 
@@ -347,7 +356,7 @@ Putting it all together, your CLI will:
 1. **Parse arguments** (including `--interactive`).  
 2. **Expand globs** and gather a list of files.  
 3. If `--interactive`, **show TUI** to let the user unselect or select files.  
-4. **Collect file contents**; for each file that isn’t valid text, log a warning.  
+4. **Collect file contents**; for each file that isn't valid text, log a warning.  
 5. **Generate an XML-like string**, grouping by folder.  
 6. **Copy** that string to the clipboard.  
 7. **Count tokens** using `tiktoken_rs`.  

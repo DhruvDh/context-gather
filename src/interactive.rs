@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt::Write as FmtWrite,
+    panic,
     path::PathBuf,
 };
 
@@ -44,6 +45,15 @@ fn adjust_scroll_and_slice(selected_idx: &mut usize,
 pub fn select_files_tui(paths: Vec<PathBuf>,
                         preselected: &[PathBuf])
                         -> Result<Vec<PathBuf>> {
+    // Install panic hook to cleanup terminal state on panic
+    let default_hook = panic::take_hook();
+    panic::set_hook(Box::new(move |info| {
+                        let _ = disable_raw_mode();
+                        let _ =
+                            execute!(std::io::stdout(), LeaveAlternateScreen, DisableMouseCapture);
+                        default_hook(info);
+                    }));
+
     // Mark items as checked if they're in `preselected`
     let mut items: Vec<(PathBuf, bool)> = paths.into_iter()
                                                .map(|p| {

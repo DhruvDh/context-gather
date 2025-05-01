@@ -1,13 +1,13 @@
 use std::{
     fs,
-    io::{BufReader, Read},
     path::{Path, PathBuf},
 };
 
 use anyhow::{Result, anyhow};
 use glob::glob;
 use ignore::WalkBuilder;
-use tiktoken_rs::o200k_base;
+use once_cell::sync::Lazy;
+use tiktoken_rs::{CoreBPE, o200k_base};
 
 #[derive(Debug)]
 pub struct FileContents {
@@ -16,12 +16,17 @@ pub struct FileContents {
     pub contents: String,
 }
 
+static TOKENIZER: Lazy<CoreBPE> =
+    Lazy::new(|| o200k_base().expect("Failed to initialize tokenizer"));
+
 pub fn expand_paths(paths: Vec<String>) -> Result<Vec<PathBuf>> {
     let mut expanded = Vec::new();
 
     for p in paths {
-        // Attempt to treat it like a glob first
-        let pattern_results = glob(&p).map_err(|e| anyhow!("Invalid glob pattern {}: {:?}", p, e))?;
+        // Normalize Windows path separators for glob patterns
+        let pattern = p.replace('\\', "/");
+        let pattern_results =
+            glob(&pattern).map_err(|e| anyhow!("Invalid glob pattern {}: {:?}", pattern, e))?;
 
         // If no matches, consider it a normal path
         let mut has_match = false;
@@ -68,11 +73,14 @@ pub fn gather_all_file_paths(paths: &[PathBuf]) -> Result<Vec<PathBuf>> {
     Ok(results)
 }
 
-/// Reads the contents of each file path into `FileContents`.
-pub fn collect_file_data(file_paths: &[PathBuf]) -> Result<Vec<FileContents>> {
+/// Reads the contents of each file path into `FileContents`, enforcing a
+/// maximum size.
+pub fn collect_file_data(file_paths: &[PathBuf],
+                         max_size: u64)
+                         -> Result<Vec<FileContents>> {
     let mut results = Vec::new();
     for path in file_paths {
-        match read_file(path) {
+        match read_file(path, max_size) {
             Ok(fc) => results.push(fc),
             Err(e) => eprintln!("{}", e),
         }
@@ -89,23 +97,37 @@ pub fn collect_file_data(file_paths: &[PathBuf]) -> Result<Vec<FileContents>> {
     Ok(results)
 }
 
-pub fn count_tokens(text: &str) -> Result<()> {
-    let bpe = o200k_base()?;
-    let tokens = bpe.encode_with_special_tokens(text);
-    println!("Token count: {}", tokens.len());
-    Ok(())
+/// Returns the number of tokens in the given text.
+pub fn count_tokens(text: &str) -> usize {
+    let tokens = TOKENIZER.encode_with_special_tokens(text);
+    tokens.len()
 }
-fn read_file(path: &Path) -> Result<FileContents> {
-    let file = fs::File::open(path)?;
-    let mut reader = BufReader::new(file);
-    let mut content = String::new();
-    reader.read_to_string(&mut content).map_err(|_| {
-                                            anyhow!("Warning: {:?} is not a valid text file. \
-                                                     Skipping.",
-                                                    path)
-                                        })?;
 
-    Ok(FileContents { folder:   path.parent().unwrap_or_else(|| Path::new("")).to_path_buf(),
-                      path:     path.to_path_buf(),
-                      contents: content, })
+fn read_file(path: &Path,
+             max_size: u64)
+             -> Result<FileContents> {
+    // Enforce the maximum file size
+    let metadata = fs::metadata(path)?;
+    if metadata.len() > max_size {
+        return Err(anyhow!("Warning: {:?} exceeds {} bytes. Skipping.",
+                           path,
+                           max_size));
+    }
+    // Read the entire file into memory and detect binary
+    let content_bytes = fs::read(path)?;
+    // Simple binary detection: check first 4KiB for non-text bytes
+    let sample_size = content_bytes.len().min(4096);
+    let non_text = content_bytes[..sample_size].iter()
+                                               .filter(|&&b| b == 0 || b > 0x7F)
+                                               .count();
+    if sample_size > 0 && (non_text as f64) / (sample_size as f64) > 0.3 {
+        return Err(anyhow!("Warning: {:?} appears to be a binary file. \
+                            Skipping.",
+                           path));
+    }
+    // Convert to UTF-8, replacing invalid sequences to avoid double allocation
+    let contents = String::from_utf8_lossy(&content_bytes).into_owned();
+    Ok(FileContents { folder: path.parent().unwrap_or_else(|| Path::new("")).to_path_buf(),
+                      path: path.to_path_buf(),
+                      contents })
 }
