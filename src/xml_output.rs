@@ -32,10 +32,11 @@ pub fn build_xml(files: &[FileContents]) -> Result<String> {
         }
         // File element
         let path = file.path.to_slash_lossy().to_string();
-        let name = file.path
-                       .file_name()
-                       .map(|n| n.to_string_lossy().to_string())
-                       .unwrap_or_default();
+        let name = file
+            .path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
         let mut f = BytesStart::new("file-contents");
         f.push_attribute(("path", path.as_str()));
         f.push_attribute(("name", name.as_str()));

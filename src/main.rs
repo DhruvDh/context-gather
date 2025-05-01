@@ -20,9 +20,10 @@ fn main() -> Result<()> {
 
     // Helper: check if `candidate` is "under" any user-specified path (including
     // exact matches).
-    fn is_preselected(candidate: &std::path::Path,
-                      user_paths: &[PathBuf])
-                      -> bool {
+    fn is_preselected(
+        candidate: &std::path::Path,
+        user_paths: &[PathBuf],
+    ) -> bool {
         // Attempt to canonicalize the candidate; skip if it fails
         let cand_canon = match dunce::canonicalize(candidate) {
             Ok(c) => c,
@@ -59,11 +60,11 @@ fn main() -> Result<()> {
 
     // 3) Among those gathered, preselect anything "under" or exactly matching user
     //    paths
-    let preselected_paths: Vec<PathBuf> =
-        candidate_files.iter()
-                       .filter(|cand| is_preselected(cand, &user_paths_raw))
-                       .cloned()
-                       .collect();
+    let preselected_paths: Vec<PathBuf> = candidate_files
+        .iter()
+        .filter(|cand| is_preselected(cand, &user_paths_raw))
+        .cloned()
+        .collect();
 
     // 4) If interactive, open the TUI
     if cli.interactive {
@@ -78,18 +79,19 @@ fn main() -> Result<()> {
 
     // 5) Exclude patterns: abort if all provided globs are invalid
     let raw_patterns: Vec<String> = cli.exclude.iter().map(|p| p.replace('\\', "/")).collect();
-    let patterns: Vec<Pattern> = raw_patterns.iter()
-                                             .filter_map(|p| Pattern::new(p).ok())
-                                             .collect();
+    let patterns: Vec<Pattern> = raw_patterns
+        .iter()
+        .filter_map(|p| Pattern::new(p).ok())
+        .collect();
     if !raw_patterns.is_empty() && patterns.is_empty() {
         eprintln!("Error: every --exclude pattern was invalid: {raw_patterns:?}");
         std::process::exit(2);
     }
     if !patterns.is_empty() {
         candidate_files.retain(|path| {
-                           let p = path.to_slash_lossy();
-                           !patterns.iter().any(|pat| pat.matches(p.as_ref()))
-                       });
+            let p = path.to_slash_lossy();
+            !patterns.iter().any(|pat| pat.matches(p.as_ref()))
+        });
     }
     // Exclusion filtering applied
 
@@ -106,14 +108,16 @@ fn main() -> Result<()> {
     }
     // 8) Count tokens and print summary
     let token_count = gather::count_tokens(&xml_output);
-    println!("✔ Processed {} files ({} tokens){}",
-             file_data.len(),
-             token_count,
-             if !cli.no_clipboard {
-                 " to clipboard"
-             } else {
-                 ""
-             });
+    println!(
+        "✔ Processed {} files ({} tokens){}",
+        file_data.len(),
+        token_count,
+        if !cli.no_clipboard {
+            " to clipboard"
+        } else {
+            ""
+        }
+    );
     // 9) Warn if token count exceeds model context limit
     if let Some(limit) = cli.model_context {
         if token_count > limit {

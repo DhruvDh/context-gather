@@ -11,8 +11,8 @@ use tiktoken_rs::{CoreBPE, o200k_base};
 
 #[derive(Debug)]
 pub struct FileContents {
-    pub folder:   PathBuf,
-    pub path:     PathBuf,
+    pub folder: PathBuf,
+    pub path: PathBuf,
     pub contents: String,
 }
 
@@ -50,9 +50,10 @@ pub fn gather_all_file_paths(paths: &[PathBuf]) -> Result<Vec<PathBuf>> {
 
     for path in paths {
         // Recursively gather files with `.gitignore` support
-        let walker = WalkBuilder::new(path).follow_links(false) // Adjust if you want to follow symlinks
-                                           .standard_filters(true) // Respects .gitignore, hidden files, etc.
-                                           .build();
+        let walker = WalkBuilder::new(path)
+            .follow_links(false) // Adjust if you want to follow symlinks
+            .standard_filters(true) // Respects .gitignore, hidden files, etc.
+            .build();
 
         for entry_result in walker {
             match entry_result {
@@ -75,9 +76,10 @@ pub fn gather_all_file_paths(paths: &[PathBuf]) -> Result<Vec<PathBuf>> {
 
 /// Reads the contents of each file path into `FileContents`, enforcing a
 /// maximum size.
-pub fn collect_file_data(file_paths: &[PathBuf],
-                         max_size: u64)
-                         -> Result<Vec<FileContents>> {
+pub fn collect_file_data(
+    file_paths: &[PathBuf],
+    max_size: u64,
+) -> Result<Vec<FileContents>> {
     let mut results = Vec::new();
     for path in file_paths {
         match read_file(path, max_size) {
@@ -87,13 +89,13 @@ pub fn collect_file_data(file_paths: &[PathBuf],
     }
     // Sort by folder then file name
     results.sort_by(|a, b| {
-               let folder_cmp = a.folder.cmp(&b.folder);
-               if folder_cmp == std::cmp::Ordering::Equal {
-                   a.path.cmp(&b.path)
-               } else {
-                   folder_cmp
-               }
-           });
+        let folder_cmp = a.folder.cmp(&b.folder);
+        if folder_cmp == std::cmp::Ordering::Equal {
+            a.path.cmp(&b.path)
+        } else {
+            folder_cmp
+        }
+    });
     Ok(results)
 }
 
@@ -103,31 +105,39 @@ pub fn count_tokens(text: &str) -> usize {
     tokens.len()
 }
 
-fn read_file(path: &Path,
-             max_size: u64)
-             -> Result<FileContents> {
+fn read_file(
+    path: &Path,
+    max_size: u64,
+) -> Result<FileContents> {
     // Enforce the maximum file size
     let metadata = fs::metadata(path)?;
     if metadata.len() > max_size {
-        return Err(anyhow!("Warning: {:?} exceeds {} bytes. Skipping.",
-                           path,
-                           max_size));
+        return Err(anyhow!(
+            "Warning: {:?} exceeds {} bytes. Skipping.",
+            path,
+            max_size
+        ));
     }
     // Read the entire file into memory and detect binary
     let content_bytes = fs::read(path)?;
     // Simple binary detection: check first 4KiB for non-text bytes
     let sample_size = content_bytes.len().min(4096);
-    let non_text = content_bytes[..sample_size].iter()
-                                               .filter(|&&b| b == 0 || b > 0x7F)
-                                               .count();
+    let non_text = content_bytes[..sample_size]
+        .iter()
+        .filter(|&&b| b == 0 || b > 0x7F)
+        .count();
     if sample_size > 0 && (non_text as f64) / (sample_size as f64) > 0.3 {
-        return Err(anyhow!("Warning: {:?} appears to be a binary file. \
+        return Err(anyhow!(
+            "Warning: {:?} appears to be a binary file. \
                             Skipping.",
-                           path));
+            path
+        ));
     }
     // Convert to UTF-8, replacing invalid sequences to avoid double allocation
     let contents = String::from_utf8_lossy(&content_bytes).into_owned();
-    Ok(FileContents { folder: path.parent().unwrap_or_else(|| Path::new("")).to_path_buf(),
-                      path: path.to_path_buf(),
-                      contents })
+    Ok(FileContents {
+        folder: path.parent().unwrap_or_else(|| Path::new("")).to_path_buf(),
+        path: path.to_path_buf(),
+        contents,
+    })
 }

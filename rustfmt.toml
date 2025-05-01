@@ -3,13 +3,13 @@
 ########################################################
 
 # Because `merge_imports` is deprecated, use this instead:
-imports_granularity = "Crate"
+# imports_granularity = "Crate"
 
 # Keep imports sorted
 reorder_imports = true
 
 # Group standard-library vs. external crate imports
-group_imports = "StdExternalCrate"
+# group_imports = "StdExternalCrate"
 
 # Reorder mod statements 
 reorder_modules = true
@@ -21,7 +21,7 @@ newline_style = "Unix"
 max_width = 100
 
 # Indentation style: "Visual" can give a more column-like alignment
-indent_style = "Visual"
+# indent_style = "Visual"
 
 ########################################################
 # Alignment & Layout
@@ -29,11 +29,11 @@ indent_style = "Visual"
 
 # Align struct fields if the longest field name is <= threshold
 # Increase beyond 20 if you want deeper alignment.
-struct_field_align_threshold = 20
+# struct_field_align_threshold = 20
 
 # Enum discriminant alignment is often unstable, but if your rustfmt
 # version supports it and doesn't warn, set it:
-enum_discrim_align_threshold = 20
+# enum_discrim_align_threshold = 20
 
 # Layout for function parameters: "Tall" (default), "Compressed", or "Vertical".
 # "Vertical" is somewhat more "columnar" if you have multiple parameters.
@@ -49,28 +49,28 @@ fn_call_width = 60
 ########################################################
 
 # Wrap comments (including doc comments) at max_width
-wrap_comments = true
+# wrap_comments = true
 
 # Attempt to format code blocks in doc comments
-format_code_in_doc_comments = true
+# format_code_in_doc_comments = true
 
 ########################################################
 # Other Tweaks
 ########################################################
 
 # Use shorthand field initialization (Foo { x, y }).
-use_field_init_shorthand = true
+# use_field_init_shorthand = true
 
 # If you want to reorder impl items (unstable):
 # reorder_impl_items = true
 
 # You can also normalize block comment style:
-normalize_comments = true
-normalize_doc_attributes = true
+# normalize_comments = true
+# normalize_doc_attributes = true
 
 # Additional string formatting at line breaks
-format_strings = true
+# format_strings = true
 
 # Prevent forced inline struct literals and allow overflow-delimited expressions
-overflow_delimited_expr = true
-struct_lit_single_line = false
+# overflow_delimited_expr = true
+# struct_lit_single_line = false

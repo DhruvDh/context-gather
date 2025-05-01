@@ -2,9 +2,10 @@ use anyhow::Result;
 use copypasta::{ClipboardContext, ClipboardProvider};
 
 /// Copy text to clipboard, warning on failure if `fail_hard` is false.
-pub fn copy_to_clipboard(text: &str,
-                         fail_hard: bool)
-                         -> Result<()> {
+pub fn copy_to_clipboard(
+    text: &str,
+    fail_hard: bool,
+) -> Result<()> {
     // Initialize clipboard context
     #[cfg(target_os = "linux")]
     let ctx_res = ClipboardContext::new_wayland().or_else(|_| ClipboardContext::new());
