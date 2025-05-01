@@ -7,9 +7,6 @@ pub fn copy_to_clipboard(
     fail_hard: bool,
 ) -> Result<()> {
     // Initialize clipboard context
-    #[cfg(target_os = "linux")]
-    let ctx_res = ClipboardContext::new_wayland().or_else(|_| ClipboardContext::new());
-    #[cfg(not(target_os = "linux"))]
     let ctx_res = ClipboardContext::new();
     let mut ctx = match ctx_res {
         Ok(c) => c,
