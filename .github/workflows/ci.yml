@@ -12,9 +12,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
-      - name: Install X11 dev headers on Ubuntu
+      - name: Install X11 and Wayland dev headers on Ubuntu
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libxcb-composite0-dev xorg-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxcb-composite0-dev xorg-dev libwayland-dev pkg-config
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
