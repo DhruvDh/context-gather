@@ -71,20 +71,20 @@ fn main() -> Result<()> {
         candidate_files = interactive::select_files_tui(candidate_files, &preselected_paths)?;
     }
 
-    // 5) Exclude patterns
-    if !cli.exclude.is_empty() {
-        let patterns: Vec<Pattern> = cli.exclude
-                                        .iter()
-                                        .filter_map(|p| Pattern::new(&p.replace('\\', "/")).ok())
-                                        .collect();
-        if patterns.is_empty() {
-            eprintln!("Warning: no valid --exclude patterns provided");
-        } else {
-            candidate_files.retain(|path| {
-                               let p = path.to_slash_lossy();
-                               !patterns.iter().any(|pat| pat.matches(p.as_ref()))
-                           });
-        }
+    // 5) Exclude patterns: abort if all provided globs are invalid
+    let raw_patterns: Vec<String> = cli.exclude.iter().map(|p| p.replace('\\', "/")).collect();
+    let patterns: Vec<Pattern> = raw_patterns.iter()
+                                             .filter_map(|p| Pattern::new(p).ok())
+                                             .collect();
+    if !raw_patterns.is_empty() && patterns.is_empty() {
+        eprintln!("Error: every --exclude pattern was invalid: {raw_patterns:?}");
+        std::process::exit(2);
+    }
+    if !patterns.is_empty() {
+        candidate_files.retain(|path| {
+                           let p = path.to_slash_lossy();
+                           !patterns.iter().any(|pat| pat.matches(p.as_ref()))
+                       });
     }
     // Exclusion filtering applied
 
@@ -93,7 +93,8 @@ fn main() -> Result<()> {
     let xml_output = xml_output::build_xml(&file_data)?;
     // 7) Copy to clipboard unless disabled, and/or print to stdout
     if !cli.no_clipboard {
-        clipboard::copy_to_clipboard(&xml_output)?;
+        // fail_hard=true since user expects clipboard
+        clipboard::copy_to_clipboard(&xml_output, true)?;
     }
     if cli.stdout {
         println!("{}", xml_output);

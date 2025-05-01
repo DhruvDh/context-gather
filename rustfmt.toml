@@ -36,12 +36,12 @@ struct_field_align_threshold = 20
 enum_discrim_align_threshold = 20
 
 # Layout for function parameters: "Tall" (default), "Compressed", or "Vertical".
-# "Vertical" is somewhat more “columnar” if you have multiple parameters.
+# "Vertical" is somewhat more "columnar" if you have multiple parameters.
 fn_params_layout = "Vertical"
 
 # No stable option for controlling function call alignment beyond
 # `fn_call_width` + `indent_style = "Visual"`
-# so let’s set fn_call_width to a smaller threshold, forcing wrapping:
+# so let's set fn_call_width to a smaller threshold, forcing wrapping:
 fn_call_width = 60
 
 ########################################################
@@ -70,3 +70,7 @@ normalize_doc_attributes = true
 
 # Additional string formatting at line breaks
 format_strings = true
+
+# Prevent forced inline struct literals and allow overflow-delimited expressions
+overflow_delimited_expr = true
+struct_lit_single_line = false

@@ -357,7 +357,10 @@ pub fn select_files_tui(paths: Vec<PathBuf>,
                 })?;
 
         // Handle input
-        if let Event::Key(KeyEvent { code, modifiers, .. }) = event::read()? {
+        if let Event::Key(KeyEvent { code,
+                                     modifiers,
+                                     .. }) = event::read()?
+        {
             match (code, modifiers) {
                 // Quit without selection (requires Ctrl+Q)
                 (KeyCode::Char('q'), KeyModifiers::CONTROL) => {

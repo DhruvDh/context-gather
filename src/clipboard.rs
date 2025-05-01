@@ -1,21 +1,33 @@
 use anyhow::Result;
 use copypasta::{ClipboardContext, ClipboardProvider};
 
-pub fn copy_to_clipboard(text: &str) -> Result<()> {
-    // Platform-specific clipboard context
+/// Copy text to clipboard, warning on failure if `fail_hard` is false.
+pub fn copy_to_clipboard(text: &str,
+                         fail_hard: bool)
+                         -> Result<()> {
+    // Initialize clipboard context
     #[cfg(target_os = "linux")]
-    let mut ctx = ClipboardContext::new_wayland().or_else(|_| ClipboardContext::new())
-                                                 .map_err(|e| {
-                                                     anyhow::anyhow!("Failed to create Wayland \
-                                                                      clipboard context: {:?}",
-                                                                     e)
-                                                 })?;
+    let ctx_res = ClipboardContext::new_wayland().or_else(|_| ClipboardContext::new());
     #[cfg(not(target_os = "linux"))]
-    let mut ctx =
-        ClipboardContext::new().map_err(|e| {
-                                   anyhow::anyhow!("Failed to create clipboard context: {:?}", e)
-                               })?;
-    ctx.set_contents(text.to_string())
-       .map_err(|e| anyhow::anyhow!("Failed to copy to clipboard: {:?}", e))?;
+    let ctx_res = ClipboardContext::new();
+    let mut ctx = match ctx_res {
+        Ok(c) => c,
+        Err(e) => {
+            if fail_hard {
+                return Err(anyhow::anyhow!("Clipboard init failed: {:?}", e));
+            } else {
+                eprintln!("⚠️  Clipboard unavailable: {e:?}");
+                return Ok(());
+            }
+        }
+    };
+    // Set clipboard contents
+    if let Err(e) = ctx.set_contents(text.to_string()) {
+        if fail_hard {
+            return Err(anyhow::anyhow!("Clipboard copy failed: {:?}", e));
+        } else {
+            eprintln!("⚠️  Clipboard copy failed: {e:?}");
+        }
+    }
     Ok(())
 }

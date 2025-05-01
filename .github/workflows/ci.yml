@@ -31,15 +31,15 @@ jobs:
         with:
           path: ~/.cargo/git
           key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+      - name: Format check
+        run: cargo fmt --all -- --check
       - name: cargo check
         run: cargo check --all-targets
-      - name: Smoke-run help
-        run: cargo run -- --help
-      - name: Build
-        run: cargo build --verbose
       - name: Clippy (deny warnings)
         run: cargo clippy --all-targets --all-features -- -D warnings
-      - name: Run tests
+      - name: Build
+        run: cargo build --all-targets --verbose
+      - name: Tests
         run: cargo test --verbose
-      - name: Check formatting
-        run: cargo fmt -- --check
+      - name: Smoke run
+        run: cargo run -- --help
