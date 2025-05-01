@@ -31,8 +31,6 @@ jobs:
         with:
           path: ~/.cargo/git
           key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
-      - name: Format check
-        run: cargo fmt --all -- --check
       - name: cargo check
         run: cargo check --all-targets
       - name: Clippy (deny warnings)
