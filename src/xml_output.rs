@@ -1,49 +1,57 @@
-use std::path::PathBuf;
+use anyhow::Result;
+use path_slash::PathBufExt;
+use quick_xml::{
+    Writer,
+    events::{BytesEnd, BytesStart, BytesText, Event},
+};
 
 use super::gather::FileContents;
 
-pub fn build_xml(files: &[FileContents]) -> String {
-    if files.is_empty() {
-        return "".to_string();
-    }
+/// Builds an XML-like structure grouping files by folder using a streaming
+/// writer.
+pub fn build_xml(files: &[FileContents]) -> Result<String> {
+    // Initialize writer with indentation
+    let mut writer = Writer::new_with_indent(Vec::new(), b' ', 2);
+    // Root element
+    writer.write_event(Event::Start(BytesStart::new("context-gather")))?;
 
-    // We iterate folder by folder
-    let mut current_folder: Option<&PathBuf> = None;
-    let mut output = String::new();
-
+    let mut current_folder: Option<String> = None;
     for file in files {
-        // If this is a new folder, close the old folder tag and open a new one
-        if current_folder.is_none() || current_folder.unwrap() != &file.folder {
-            // Close the previous folder if needed
+        let folder = file.folder.to_slash_lossy().to_string();
+        // Open new folder tag if needed
+        if current_folder.as_ref() != Some(&folder) {
             if current_folder.is_some() {
-                output.push_str("  </folder>\n");
-                output.push('\n');
+                writer.write_event(Event::End(BytesEnd::new("folder")))?;
             }
-            current_folder = Some(&file.folder);
-
-            // Start new folder
-            let folder_str = file.folder.to_string_lossy();
-            output.push_str(&format!("  <folder path=\"{}\">\n", folder_str));
+            current_folder = Some(folder.clone());
+            let mut fld = BytesStart::new("folder");
+            fld.push_attribute(("path", folder.as_str()));
+            writer.write_event(Event::Start(fld))?;
         }
-
-        // Add file contents
-        let file_name = file.path
-                            .file_name()
-                            .map(|s| s.to_string_lossy().to_string())
-                            .unwrap_or_else(|| "unknown".to_string());
-        let path_str = file.path.to_string_lossy();
-        output.push_str(&format!("    <file-contents path=\"{}\" name=\"{}\">\n",
-                                 path_str, file_name));
-        // Indent file contents for readability, or just dump them as-is
-        output.push_str(&format!("{}\n", file.contents));
-        output.push_str("    </file-contents>\n");
+        // File element
+        let path = file.path.to_slash_lossy().to_string();
+        let name = file
+            .path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let mut f = BytesStart::new("file-contents");
+        f.push_attribute(("path", path.as_str()));
+        f.push_attribute(("name", name.as_str()));
+        writer.write_event(Event::Start(f))?;
+        // Write file contents as text (escaped)
+        writer.write_event(Event::Text(BytesText::from_escaped(file.contents.as_str())))?;
+        writer.write_event(Event::End(BytesEnd::new("file-contents")))?;
     }
-
-    // Close the last folder
+    // Close last folder
     if current_folder.is_some() {
-        output.push_str("  </folder>\n");
+        writer.write_event(Event::End(BytesEnd::new("folder")))?;
     }
+    // Close root
+    writer.write_event(Event::End(BytesEnd::new("context-gather")))?;
 
-    // Wrap everything in a top-level XML-ish tag for clarity
-    format!("<current-context>\n{}\n</current-context>", output)
+    // Convert buffer to String
+    let buf = writer.into_inner();
+    let s = String::from_utf8(buf)?;
+    Ok(s)
 }
