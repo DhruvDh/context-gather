@@ -385,14 +385,14 @@ pub fn select_files_tui(
                 }
                 // Toggle extension mode
                 (KeyCode::Char('e'), KeyModifiers::CONTROL) => {
-                    if (!extension_mode) {
+                    if !extension_mode {
                         // We are ENTERING extension mode
                         // Save the old search input in case we want to restore it
                         saved_search_input = search_input.clone();
                         // Clear the main search and rely on extension_search now
                         search_input.clear();
                         extension_mode = true;
-                        if (reset_ext_on_toggle) {
+                        if reset_ext_on_toggle {
                             // Clear all extension checks & extension search
                             for (_, is_checked) in extension_items.iter_mut() {
                                 *is_checked = false;
