@@ -3,6 +3,7 @@ use crate::gather::{FileContents, count_tokens};
 use std::path::{Path, PathBuf};
 
 /// Metadata for each file in the context header
+#[allow(dead_code)]
 pub struct FileMeta {
     pub id: usize,
     pub path: PathBuf,
