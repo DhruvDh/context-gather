@@ -2,7 +2,7 @@ use anyhow::Result;
 use path_slash::PathBufExt;
 use quick_xml::{
     Writer,
-    events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event},
+    events::{BytesEnd, BytesStart, BytesText, Event},
 };
 
 use super::gather::FileContents;
@@ -12,8 +12,6 @@ use super::gather::FileContents;
 pub fn build_xml(files: &[FileContents]) -> Result<String> {
     // Initialize writer with indentation
     let mut writer = Writer::new_with_indent(Vec::new(), b' ', 2);
-    // XML declaration
-    writer.write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)))?;
     // Root element
     writer.write_event(Event::Start(BytesStart::new("context-gather")))?;
 

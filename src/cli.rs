@@ -16,22 +16,30 @@ pub struct Cli {
     pub interactive: bool,
 
     /// Do not copy to clipboard.
-    #[arg(long)]
+    #[arg(short = 'n', long = "no-clipboard")]
     pub no_clipboard: bool,
 
     /// Print XML output to stdout.
-    #[arg(long)]
+    #[arg(short = 'o', long = "stdout")]
     pub stdout: bool,
 
     /// Maximum file size in bytes before skipping files.
-    #[arg(long, default_value_t = 1048576)]
+    #[arg(short = 's', long = "max-size", default_value_t = 1048576)]
     pub max_size: u64,
 
     /// Glob patterns to exclude files from processing.
-    #[arg(long)]
+    #[arg(short = 'x', long = "exclude")]
     pub exclude: Vec<String>,
 
     /// Maximum token count for model context; warn if exceeded.
-    #[arg(long)]
+    #[arg(short = 'L', long = "model-context")]
     pub model_context: Option<usize>,
+
+    /// Split the context into chunks no larger than this many tokens. Default = 0 means no chunking.
+    #[arg(short = 'c', long = "chunk-size", default_value_t = 0)]
+    pub chunk_size: usize,
+
+    /// Insert <more/> markers so an LLM knows additional chunks will follow.
+    #[arg(short = 'm', long = "emit-markers")]
+    pub emit_markers: bool,
 }

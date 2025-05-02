@@ -1,3 +1,4 @@
+mod chunker;
 mod cli;
 mod clipboard;
 mod gather;
@@ -98,26 +99,48 @@ fn main() -> Result<()> {
     // 6) Read file data and build XML
     let file_data = gather::collect_file_data(&candidate_files, cli.max_size)?;
     let xml_output = xml_output::build_xml(&file_data)?;
-    // 7) Copy to clipboard unless disabled, and/or print to stdout
-    if !cli.no_clipboard {
-        // fail_hard=true since user expects clipboard
-        clipboard::copy_to_clipboard(&xml_output, true)?;
+
+    // 7) Chunking and output streaming
+    let chunks = chunker::chunk_by_tokens(&xml_output, cli.chunk_size);
+    for (idx, part) in chunks.iter().enumerate() {
+        let decorated = if cli.emit_markers {
+            format!(
+                "<context-part index=\"{}\" of=\"{}\">\n{}\n</context-part>",
+                idx + 1,
+                chunks.len(),
+                part
+            )
+        } else {
+            part.clone()
+        };
+
+        // 7a) Clipboard per chunk (soft failure)
+        if !cli.no_clipboard {
+            clipboard::copy_to_clipboard(&decorated, false)?;
+        }
+        // 7b) Stdout per chunk
+        if cli.stdout {
+            println!("{decorated}");
+            if cli.emit_markers && idx + 1 < chunks.len() {
+                println!("<more/>");
+            }
+        }
     }
-    if cli.stdout {
-        println!("{xml_output}");
-    }
-    // 8) Count tokens and print summary
+
+    // 8) Count tokens and print summary with chunk count
     let token_count = gather::count_tokens(&xml_output);
     println!(
-        "✔ Processed {} files ({} tokens){}",
+        "✔ Processed {} files ({} tokens) in {} chunks{}",
         file_data.len(),
         token_count,
+        chunks.len(),
         if !cli.no_clipboard {
             " to clipboard"
         } else {
             ""
         }
     );
+
     // 9) Warn if token count exceeds model context limit
     if let Some(limit) = cli.model_context {
         if token_count > limit {
