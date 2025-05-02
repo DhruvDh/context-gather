@@ -47,3 +47,7 @@ jobs:
         run: printf "q\n" | cargo run -- -i -c 1000 -n
       - name: Auto-copy default
         run: printf "q\n" | cargo run -- -i -c 3000 README.md
+      - name: cargo fmt
+        run: cargo fmt --check
+      - name: Clippy (deny warnings)
+        run: cargo clippy --all-targets -- -D warnings
