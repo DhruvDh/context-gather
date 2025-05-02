@@ -2,6 +2,7 @@ mod chunker;
 mod cli;
 mod clipboard;
 mod gather;
+mod header;
 mod interactive;
 mod xml_output;
 
@@ -124,7 +125,26 @@ fn main() -> Result<()> {
     let token_count = gather::count_tokens(&xml_output);
 
     // 7) Smart chunking with metadata
-    let (chunks, _metas) = chunker::build_chunks(&file_data, cli.chunk_size);
+    let (mut chunks, metas) = chunker::build_chunks(&file_data, cli.chunk_size);
+
+    // ── 1. build XML for the header  ──────────────────────────────────
+    use gather::count_tokens;
+    let total_chunks = chunks.len() + 1; // +1 for the header itself
+    let header_xml = format!(
+        "<shared-context>\n{}\n",
+        header::make_header(total_chunks, cli.chunk_size, &metas)
+    );
+    let header_chunk = chunker::Chunk {
+        index: 0,
+        tokens: count_tokens(&header_xml),
+        xml: header_xml,
+    };
+
+    // ── 2. prepend and re-number the data chunks  ────────────────────
+    for (i, c) in chunks.iter_mut().enumerate() {
+        c.index = i + 1;
+    }
+    chunks.insert(0, header_chunk);
 
     // Interactive mode: prompt to copy/print chunks sequentially
     if cli.interactive {
@@ -205,12 +225,25 @@ fn main() -> Result<()> {
     let total_chunks = chunks.len();
     for (i, chunk) in chunks.iter().enumerate() {
         if cli.stdout {
-            println!(r#"<context-chunk id="{}/{}">"#, i, total_chunks);
-            println!("{}", chunk.xml);
-            println!("</context-chunk>");
+            if i == 0 {
+                // header chunk is already a complete XML fragment
+                println!("{}", chunk.xml);
+            } else {
+                println!(r#"<context-chunk id="{}/{}">"#, i, total_chunks);
+                println!("{}", chunk.xml);
+                println!("</context-chunk>");
+            }
             let remaining = total_chunks - i - 1;
-            if remaining > 0 {
-                println!(r#"<more remaining="{}"/>"#, remaining);
+            // after the last real chunk, also close </shared-context>
+            if remaining == 0 {
+                println!("</shared-context>");
+            }
+            // emit marker
+            if i == 0 {
+                // header chunk always has "more"
+                println!(r#"<more remaining="{}"/>"#, total_chunks - 1);
+            } else if remaining > 0 {
+                println!(r#"<more remaining="{remaining}"/>"#);
             }
         }
         if copy_idx == i as isize {
