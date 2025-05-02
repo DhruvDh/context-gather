@@ -125,11 +125,11 @@ fn main() -> Result<()> {
     let token_count = gather::count_tokens(&xml_output);
 
     // 7) Smart chunking with metadata
-    let (mut chunks, metas) = chunker::build_chunks(&file_data, cli.chunk_size);
-
-    // ── 1. build XML for the header  ──────────────────────────────────
+    let (mut data_chunks, metas) = chunker::build_chunks(&file_data, cli.chunk_size);
+    // Build full set of chunks including header
     use gather::count_tokens;
-    let total_chunks = chunks.len() + 1; // +1 for the header itself
+    let total_chunks = data_chunks.len() + 1; // +1 for header
+    // Create header XML: opens <shared-context> and includes file-map header
     let header_xml = format!(
         "<shared-context>\n{}\n",
         header::make_header(total_chunks, cli.chunk_size, &metas)
@@ -139,66 +139,61 @@ fn main() -> Result<()> {
         tokens: count_tokens(&header_xml),
         xml: header_xml,
     };
-
-    // ── 2. prepend and re-number the data chunks  ────────────────────
-    for (i, c) in chunks.iter_mut().enumerate() {
-        c.index = i + 1;
+    // Renumber data chunks and prepend header
+    for (i, chunk) in data_chunks.iter_mut().enumerate() {
+        chunk.index = i + 1;
     }
-    chunks.insert(0, header_chunk);
+    let mut chunks = Vec::with_capacity(total_chunks);
+    chunks.push(header_chunk);
+    chunks.extend(data_chunks);
 
-    // Interactive mode: prompt to copy/print chunks sequentially
+    // Interactive streaming: copy full XML with context-chunk wrappers
     if cli.interactive {
         use std::io::{self, Write};
-        // Print header chunk and marker
-        let header_xml = &chunks[0].xml;
-        if cli.stdout {
-            println!("{header_xml}");
-            if chunks.len() > 1 {
-                println!("<more/>");
-            }
-        }
-        // Prompt for chunks
         let total = chunks.len();
-        println!("▲ There are {} chunks (0..{}).", total, total - 1);
-        println!("   Press Enter to copy chunk 0, or enter chunk # to copy/print, or 'q' to quit.");
         let mut idx = 0usize;
+        println!("▲ Streaming {} chunks (0..{}).", total, total - 1);
         loop {
-            print!("[{idx}] > ");
+            let rem = total - idx - 1;
+            // Build snippet for this chunk
+            let snippet = if idx == 0 {
+                // Header: includes opening <shared-context> and header
+                let mut s = chunks[0].xml.clone();
+                if rem > 0 {
+                    s.push_str(&format!("<more remaining=\"{rem}\"/>\n"));
+                }
+                s
+            } else if rem > 0 {
+                format!(
+                    "<context-chunk id=\"{}/{}\">\n{}</context-chunk>\n<more remaining=\"{}\"/>\n",
+                    idx, total, chunks[idx].xml, rem
+                )
+            } else {
+                format!(
+                    "<context-chunk id=\"{}/{}\">\n{}</context-chunk>\n</shared-context>\n",
+                    idx, total, chunks[idx].xml
+                )
+            };
+            if !cli.no_clipboard {
+                clipboard::copy_to_clipboard(&snippet, false)?;
+                println!("✔ copied chunk {idx}");
+            }
+            if cli.stdout {
+                print!("{snippet}");
+            }
+            print!("Enter chunk # (0..{}) or 'q' to quit: ", total - 1);
             io::stdout().flush().unwrap();
-            let mut line = String::new();
-            io::stdin().read_line(&mut line).unwrap();
-            let cmd = line.trim();
+            let mut cmd = String::new();
+            io::stdin().read_line(&mut cmd).unwrap();
+            let cmd = cmd.trim();
             if cmd == "q" {
                 break;
             }
-            let n = if cmd.is_empty() {
-                idx
+            idx = if cmd.is_empty() {
+                (idx + 1) % total
             } else {
-                match cmd.parse::<usize>() {
-                    Ok(v) if v < total => v,
-                    Ok(v) => {
-                        println!("Invalid chunk index: {}. Range is 0..{}", v, total - 1);
-                        continue;
-                    }
-                    Err(_) => {
-                        println!("Unknown command '{cmd}', enter a number or 'q'");
-                        continue;
-                    }
-                }
+                cmd.parse().unwrap_or(idx)
             };
-            // Print and copy selected chunk
-            let xml = &chunks[n].xml;
-            if cli.stdout {
-                println!("{xml}");
-                if n + 1 < total {
-                    println!("<more/>");
-                }
-            }
-            if !cli.no_clipboard {
-                clipboard::copy_to_clipboard(xml, false)?;
-                println!("✔ copied chunk {n}");
-            }
-            idx = (n + 1) % total;
         }
         return Ok(());
     }
@@ -221,33 +216,32 @@ fn main() -> Result<()> {
         );
         std::process::exit(3);
     }
-    // Non-interactive: wrap each chunk in <context-chunk> with id and remaining marker
+    // Non-interactive: for each chunk, print and/or copy full XML snippet
     let total_chunks = chunks.len();
     for (i, chunk) in chunks.iter().enumerate() {
+        let rem = total_chunks - i - 1;
+        let snippet = if i == 0 {
+            let mut s = chunk.xml.clone();
+            if rem > 0 {
+                s.push_str(&format!("<more remaining=\"{rem}\"/>\n"));
+            }
+            s
+        } else if rem > 0 {
+            format!(
+                "<context-chunk id=\"{}/{}\">\n{}</context-chunk>\n<more remaining=\"{}\"/>\n",
+                i, total_chunks, chunk.xml, rem
+            )
+        } else {
+            format!(
+                "<context-chunk id=\"{}/{}\">\n{}</context-chunk>\n</shared-context>\n",
+                i, total_chunks, chunk.xml
+            )
+        };
         if cli.stdout {
-            if i == 0 {
-                // header chunk is already a complete XML fragment
-                println!("{}", chunk.xml);
-            } else {
-                println!(r#"<context-chunk id="{}/{}">"#, i, total_chunks);
-                println!("{}", chunk.xml);
-                println!("</context-chunk>");
-            }
-            let remaining = total_chunks - i - 1;
-            // after the last real chunk, also close </shared-context>
-            if remaining == 0 {
-                println!("</shared-context>");
-            }
-            // emit marker
-            if i == 0 {
-                // header chunk always has "more"
-                println!(r#"<more remaining="{}"/>"#, total_chunks - 1);
-            } else if remaining > 0 {
-                println!(r#"<more remaining="{remaining}"/>"#);
-            }
+            print!("{snippet}");
         }
-        if copy_idx == i as isize {
-            clipboard::copy_to_clipboard(&chunk.xml, false)?;
+        if copy_idx == i as isize && !cli.no_clipboard {
+            clipboard::copy_to_clipboard(&snippet, false)?;
         }
     }
     // 8) Summary

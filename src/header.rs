@@ -25,8 +25,7 @@ pub fn make_header(
     }
     // Build instructions section with actual chunk count
     let instructions = format!(
-        "  <instructions>\n    You will receive {total_chunks} chunks (including this header).\n    Reassemble files in <file-map> order. Respond \"READY\" after the final chunk.\n  </instructions>\n",
-        total_chunks = total_chunks
+        "  <instructions>\n    You will receive {total_chunks} chunks (including this header). Study these carefully, your understanding of the shared context is critical to your ability to help the user with their task.\n    Respond \"READY\" after the final chunk after you have read and understood the shared context.\n  </instructions>\n"
     );
     // Compose full header with closing tag
     format!(
