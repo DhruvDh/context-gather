@@ -12,8 +12,7 @@ pub fn build_xml(files: &[FileContents]) -> Result<String> {
         let path = file.path.to_slash_lossy().to_string();
         let tokens = count_tokens(&file.contents);
         xml.push_str(&format!(
-            "    <file id=\"{}\" path=\"{}\" tokens=\"{}\" parts=\"1\"/>\n",
-            id, path, tokens
+            "    <file id=\"{id}\" path=\"{path}\" tokens=\"{tokens}\" parts=\"1\"/>\n"
         ));
     }
     xml.push_str("  </file-map>\n");
@@ -26,7 +25,7 @@ pub fn build_xml(files: &[FileContents]) -> Result<String> {
                 xml.push_str("  </folder>\n");
             }
             current_folder = Some(folder.clone());
-            xml.push_str(&format!("  <folder path=\"{}\">\n", folder));
+            xml.push_str(&format!("  <folder path=\"{folder}\">\n"));
         }
         let path = file.path.to_slash_lossy().to_string();
         let name = file
@@ -35,8 +34,7 @@ pub fn build_xml(files: &[FileContents]) -> Result<String> {
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_default();
         xml.push_str(&format!(
-            "    <file-contents path=\"{}\" name=\"{}\">\n",
-            path, name
+            "    <file-contents path=\"{path}\" name=\"{name}\">\n"
         ));
         // Raw contents:
         xml.push_str(&file.contents);

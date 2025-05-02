@@ -1,20 +1,20 @@
 use crate::chunker::FileMeta;
-use chrono::Utc;
+use chrono::{SecondsFormat, Utc};
 use std::fmt::Write;
 
-/// Builds the context header XML for LLM consumption.
+/// Builds the shared-context-header XML for LLM consumption.
 pub fn make_header(
     total_chunks: usize,
     limit: usize,
     files: &[FileMeta],
 ) -> String {
     // Timestamp in RFC3339 with seconds precision
-    let ts = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let ts = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
     // Build file-map entries
     let mut map = String::new();
     for f in files {
         writeln!(
-            map,
+            &mut map,
             "    <file id=\"{}\" path=\"{}\" tokens=\"{}\" parts=\"{}\"/>",
             f.id,
             f.path.display(),
@@ -25,11 +25,12 @@ pub fn make_header(
     }
     // Build instructions section with actual chunk count
     let instructions = format!(
-        "  <instructions>\n    You will receive {total_chunks} chunks (including this header).\n    Reassemble files in <file-map> order. Respond \"READY\" after the final chunk.\n  </instructions>\n"
+        "  <instructions>\n    You will receive {total_chunks} chunks (including this header).\n    Reassemble files in <file-map> order. Respond \"READY\" after the final chunk.\n  </instructions>\n",
+        total_chunks = total_chunks
     );
-    // Compose full header
+    // Compose full header with closing tag
     format!(
-        "<shared-context version=\"1\" total-chunks=\"{total_chunks}\" chunk-size=\"{limit}\" generated-at=\"{ts}\">\n  <file-map total-files=\"{total}\">\n{map}  </file-map>\n{instructions}",
+        "<shared-context-header version=\"1\" total-chunks=\"{total_chunks}\" chunk-size=\"{limit}\" generated-at=\"{ts}\">\n  <file-map total-files=\"{total}\">\n{map}  </file-map>\n{instructions}</shared-context-header>\n",
         total_chunks = total_chunks,
         limit = limit,
         ts = ts,

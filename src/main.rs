@@ -2,7 +2,6 @@ mod chunker;
 mod cli;
 mod clipboard;
 mod gather;
-mod header;
 mod interactive;
 mod xml_output;
 
@@ -125,21 +124,7 @@ fn main() -> Result<()> {
     let token_count = gather::count_tokens(&xml_output);
 
     // 7) Smart chunking with metadata
-    let (mut chunks, metas) = chunker::build_chunks(&file_data, cli.chunk_size);
-    // Prepend header if chunking enabled and multiple chunks
-    if cli.chunk_size > 0 && chunks.len() > 1 {
-        let hdr = header::make_header(chunks.len(), cli.chunk_size, &metas);
-        chunks[0].xml = format!("{hdr}{}", chunks[0].xml);
-    }
-    // Wrap each chunk in a shared-context root for consistency
-    if cli.chunk_size > 0 {
-        for (i, chunk) in chunks.iter_mut().enumerate() {
-            // Wrap content chunks (skip header chunk at index 0)
-            if i > 0 {
-                chunk.xml = format!("<shared-context>\n{}\n</shared-context>\n", chunk.xml);
-            }
-        }
-    }
+    let (chunks, _metas) = chunker::build_chunks(&file_data, cli.chunk_size);
 
     // Interactive mode: prompt to copy/print chunks sequentially
     if cli.interactive {
@@ -216,11 +201,16 @@ fn main() -> Result<()> {
         );
         std::process::exit(3);
     }
+    // Non-interactive: wrap each chunk in <context-chunk> with id and remaining marker
+    let total_chunks = chunks.len();
     for (i, chunk) in chunks.iter().enumerate() {
         if cli.stdout {
+            println!(r#"<context-chunk id="{}/{}">"#, i, total_chunks);
             println!("{}", chunk.xml);
-            if i + 1 < chunks.len() {
-                println!("<more/>");
+            println!("</context-chunk>");
+            let remaining = total_chunks - i - 1;
+            if remaining > 0 {
+                println!(r#"<more remaining="{}"/>"#, remaining);
             }
         }
         if copy_idx == i as isize {

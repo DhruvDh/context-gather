@@ -17,8 +17,8 @@ fn chunk_size_splits_and_summarizes() {
         .args(["--stdout", "--no-clipboard", "-c", "50", "."])
         .assert()
         .success()
-        .stdout(contains("<shared-context-header"))
-        .stdout(contains("<more/>")) // the marker printed between chunks
+        .stdout(contains("<context-chunk id=\""))
+        .stdout(contains("<more remaining=\"")) // the marker printed between chunks
         .stdout(contains("✔")) // summary line
         .stderr(predicates::str::is_empty());
 }

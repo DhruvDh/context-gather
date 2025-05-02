@@ -32,7 +32,8 @@ fn chunk_size_splits_and_summarises() {
         .args(["--stdout", "--no-clipboard", "-c", "50", "."])
         .assert()
         .success()
-        .stdout(contains("<shared-context-header"))
+        .stdout(contains("<context-chunk id="))
+        .stdout(contains("<more remaining=\""))
         .stdout(contains("✔")) // summary line
         .stderr(predicates::str::is_empty());
 }
