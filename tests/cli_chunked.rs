@@ -17,7 +17,7 @@ fn chunk_size_splits_and_summarizes() {
         .args(["--stdout", "--no-clipboard", "-c", "50", "."])
         .assert()
         .success()
-        .stdout(contains("<context-header"))
+        .stdout(contains("<shared-context-header"))
         .stdout(contains("<more/>")) // the marker printed between chunks
         .stdout(contains("✔")) // summary line
         .stderr(predicates::str::is_empty());

@@ -8,7 +8,6 @@ mod xml_output;
 
 use std::path::PathBuf;
 
-// use crate::chunker::FileMeta; // removed unused import
 use anyhow::Result;
 use clap::Parser;
 use cli::Cli;
@@ -104,8 +103,8 @@ fn main() -> Result<()> {
 
     // If chunking disabled (-c 0), output full XML as a single chunk
     if cli.chunk_size == 0 {
-        // Print XML
-        if cli.stdout {
+        // Print XML on stdout if requested or interactive
+        if cli.stdout || cli.interactive {
             println!("{xml_output}");
         }
         // Copy to clipboard
@@ -131,6 +130,15 @@ fn main() -> Result<()> {
     if cli.chunk_size > 0 && chunks.len() > 1 {
         let hdr = header::make_header(chunks.len(), cli.chunk_size, &metas);
         chunks[0].xml = format!("{hdr}{}", chunks[0].xml);
+    }
+    // Wrap each chunk in a shared-context root for consistency
+    if cli.chunk_size > 0 {
+        for (i, chunk) in chunks.iter_mut().enumerate() {
+            // Wrap content chunks (skip header chunk at index 0)
+            if i > 0 {
+                chunk.xml = format!("<shared-context>\n{}\n</shared-context>\n", chunk.xml);
+            }
+        }
     }
 
     // Interactive mode: prompt to copy/print chunks sequentially

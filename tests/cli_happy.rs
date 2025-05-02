@@ -13,7 +13,7 @@ fn stdout_only_basic() {
         .args(["--stdout", "--no-clipboard", "foo.txt"])
         .assert()
         .success()
-        .stdout(contains("<context-gather"))
+        .stdout(contains("<shared-context>"))
         .stderr(predicates::str::is_empty());
 }
 
@@ -32,8 +32,7 @@ fn chunk_size_splits_and_summarises() {
         .args(["--stdout", "--no-clipboard", "-c", "50", "."])
         .assert()
         .success()
-        .stdout(contains("<context-header"))
-        .stdout(contains("<more/>")) // the marker printed between chunks
+        .stdout(contains("<shared-context-header"))
         .stdout(contains("✔")) // summary line
         .stderr(predicates::str::is_empty());
 }

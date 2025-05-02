@@ -29,7 +29,7 @@ pub fn make_header(
     );
     // Compose full header
     format!(
-        "<context-header version=\"1\" total-chunks=\"{total_chunks}\" chunk-size=\"{limit}\" generated-at=\"{ts}\">\n  <file-map total-files=\"{total}\">\n{map}  </file-map>\n{instructions}</context-header>\n",
+        "<shared-context version=\"1\" total-chunks=\"{total_chunks}\" chunk-size=\"{limit}\" generated-at=\"{ts}\">\n  <file-map total-files=\"{total}\">\n{map}  </file-map>\n{instructions}",
         total_chunks = total_chunks,
         limit = limit,
         ts = ts,
