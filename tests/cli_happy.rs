@@ -1,18 +1,19 @@
 use assert_cmd::Command;
 use assert_fs::prelude::*;
-use predicates::str::{contains, starts_with};
+use predicates::str::contains;
 
 #[test]
 fn stdout_only_basic() {
     let dir = assert_fs::TempDir::new().unwrap();
     dir.child("foo.txt").write_str("hello world").unwrap();
 
-    Command::cargo_bin("context-gather").unwrap()
+    Command::cargo_bin("context-gather")
+        .unwrap()
         .current_dir(&dir)
         .args(["--stdout", "--no-clipboard", "foo.txt"])
         .assert()
         .success()
-        .stdout(contains("<context-gather"))
+        .stdout(contains("<shared-context>"))
         .stderr(predicates::str::is_empty());
 }
 
@@ -20,16 +21,19 @@ fn stdout_only_basic() {
 fn chunk_size_splits_and_summarises() {
     let dir = assert_fs::TempDir::new().unwrap();
     for i in 0..10 {
-        dir.child(format!("f{i}.txt")).write_str("tok ".repeat(100)).unwrap();
+        dir.child(format!("f{i}.txt"))
+            .write_str(&"tok ".repeat(100))
+            .unwrap();
     }
 
-    Command::cargo_bin("context-gather").unwrap()
+    Command::cargo_bin("context-gather")
+        .unwrap()
         .current_dir(&dir)
         .args(["--stdout", "--no-clipboard", "-c", "50", "."])
         .assert()
         .success()
-        .stdout(contains("<context-header"))
-        .stdout(contains("<more/>"))        // the marker printed between chunks
-        .stdout(contains("✔"))             // summary line
+        .stdout(contains("<context-chunk id="))
+        .stdout(contains("<more remaining=\""))
+        .stdout(contains("✔")) // summary line
         .stderr(predicates::str::is_empty());
 }

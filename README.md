@@ -9,7 +9,7 @@ rustup default 1.85.0
 cargo install context-gather
 ```
 
-Below is a step-by-step outline for using and extending `context-gather`. It’s designed to do the following:
+Below is a step-by-step outline for using and extending `context-gather`. It's designed to do the following:
 
 1. **Accept file paths (and glob patterns) on the command line.**  
 2. **Optionally open a TUI** for interactive file selection when a flag (e.g., `-i` or `--interactive`) is used.  
@@ -19,7 +19,7 @@ Below is a step-by-step outline for using and extending `context-gather`. It’s
 6. **Token-count** the resulting output using `tiktoken_rs`.  
 7. **Handle non-text files** gracefully (warn, but do not fail).  
 
-Below, I’ll describe an example architecture, key dependencies, and pseudo-code to illustrate how the various steps tie together.
+Below, I'll describe an example architecture, key dependencies, and pseudo-code to illustrate how the various steps tie together.
 
 ## 1. Project Structure
 
@@ -50,16 +50,44 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-anyhow = "1.0.75"
+anyhow = "1.0.95"
 clap = { version = "4.4.6", features = ["derive"] }
-copypasta = "0.10.0"
-crossterm = "0.27.0"
-glob = "0.3.1"
-tiktoken-rs = "0.5.4"
+copypasta = "0.10.1"
+crossterm = "0.28.1"
+glob = "0.3.2"
+tiktoken-rs = "0.6.0"
 tui = "0.19.0"
+path-slash = "0.1.5"
+once_cell = "1.17.2"
+dunce = "1.0.5"
+quick-xml = "0.37.5"
+chrono = "0.4.41"
 ```
 
 (Adjust versions to the latest semver releases as needed.)
+
+## 3. Context Header Format
+
+When using `--chunk-size`, the first payload contains a machine-readable header:
+
+```xml
+<context-header version="1"
+                total-chunks="N"
+                chunk-size="40000"
+                generated-at="2025-05-03T15:04:22Z">
+  <file-map total-files="F">
+    <file id="0" path="src/main.rs" tokens="1874" parts="1"/>
+    <file id="1" path="src/lib.rs"  tokens="920"  parts="2"/>
+    …
+  </file-map>
+
+  <instructions>
+    You will receive N chunks (including this header).
+    Reassemble files by <file-map> order and parts.
+    Respond "READY" after the final chunk.
+  </instructions>
+</context-header>
+```
 
 ## 3. Parsing Command-Line Arguments (in `cli.rs`)
 
@@ -269,7 +297,7 @@ Your XML-like structure might look like:
 </folder>
 ```
 
-Here’s a possible approach:
+Here's a possible approach:
 
 ```rust
 use super::gather::FileContents;
@@ -330,7 +358,7 @@ fn escape_special_chars(s: &str) -> String {
 }
 ```
 
-Note that escaping may be helpful if you want to ensure valid XML. You can skip it if it’s purely for an LLM "context" use case and you're confident the LLM can handle angle brackets.
+Note that escaping may be helpful if you want to ensure valid XML. You can skip it if it's purely for an LLM "context" use case and you're confident the LLM can handle angle brackets.
 
 ## 8. Clipboard Integration (in `clipboard.rs`)
 
@@ -363,3 +391,36 @@ Putting it all together, your CLI will:
 8. **Print** the token count.  
 
 By default (without `--interactive`), it just does steps 1, 2, 4–8 and finishes immediately.
+
+## Usage Examples
+
+# Interactive chunk streaming with prompt (cycles through chunks and copies to clipboard)
+
+```bash
+context-gather -i -c 39000
+```
+
+# Non-interactive: copy or print a specific chunk
+
+```bash
+# Copy chunk 2 to clipboard
+context-gather . -c 39000 -k 2
+
+# Print chunk 2 to stdout and do not touch clipboard
+context-gather . -c 39000 -k 2 -n -o
+```
+
+## How Chunk Streaming Works
+
+When using `--chunk-size` (`-c`), `context-gather` splits the XML context into LLM-friendly chunks:
+
+1. **Smart splitting**: every `<file-contents>` block stays intact; oversize files are split by lines with `part="p/N"` markers.
+2. **Machine-readable header**: The first chunk begins with a `<context-header>` carrying:
+   - `version`: format version
+   - `total-chunks`: number of chunks including header
+   - `chunk-size`: requested token ceiling
+   - `generated-at`: ISO8601 timestamp
+   - `<file-map>`: list of files with `id`, `path`, `tokens`, and `parts` per file
+3. **Prompt cycle**: in interactive mode, after TUI selection you get a simple prompt:
+   - `c` to copy the next chunk
+   - `

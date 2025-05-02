@@ -43,6 +43,8 @@ jobs:
         run: cargo test --verbose
       - name: Smoke run
         run: cargo run -- --help
+      - name: Chunking smoke test
+        run: cargo run -- --stdout --no-clipboard -c 3000 README.md
       - name: cargo fmt
         run: cargo fmt --check
       - name: Clippy (deny warnings)

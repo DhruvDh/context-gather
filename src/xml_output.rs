@@ -1,57 +1,49 @@
+use super::gather::{FileContents, count_tokens};
 use anyhow::Result;
 use path_slash::PathBufExt;
-use quick_xml::{
-    Writer,
-    events::{BytesEnd, BytesStart, BytesText, Event},
-};
 
-use super::gather::FileContents;
-
-/// Builds an XML-like structure grouping files by folder using a streaming
-/// writer.
+/// Builds a simple XML-like structure grouping files by folder, with a file map and no escaping.
 pub fn build_xml(files: &[FileContents]) -> Result<String> {
-    // Initialize writer with indentation
-    let mut writer = Writer::new_with_indent(Vec::new(), b' ', 2);
-    // Root element
-    writer.write_event(Event::Start(BytesStart::new("context-gather")))?;
-
+    let mut xml = String::new();
+    xml.push_str("<shared-context>\n");
+    // File map section
+    xml.push_str(&format!("  <file-map total-files=\"{}\">\n", files.len()));
+    for (id, file) in files.iter().enumerate() {
+        let path = file.path.to_slash_lossy().to_string();
+        let tokens = count_tokens(&file.contents);
+        xml.push_str(&format!(
+            "    <file id=\"{id}\" path=\"{path}\" tokens=\"{tokens}\" parts=\"1\"/>\n"
+        ));
+    }
+    xml.push_str("  </file-map>\n");
+    // Group by folder
     let mut current_folder: Option<String> = None;
     for file in files {
         let folder = file.folder.to_slash_lossy().to_string();
-        // Open new folder tag if needed
         if current_folder.as_ref() != Some(&folder) {
             if current_folder.is_some() {
-                writer.write_event(Event::End(BytesEnd::new("folder")))?;
+                xml.push_str("  </folder>\n");
             }
             current_folder = Some(folder.clone());
-            let mut fld = BytesStart::new("folder");
-            fld.push_attribute(("path", folder.as_str()));
-            writer.write_event(Event::Start(fld))?;
+            xml.push_str(&format!("  <folder path=\"{folder}\">\n"));
         }
-        // File element
         let path = file.path.to_slash_lossy().to_string();
         let name = file
             .path
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_default();
-        let mut f = BytesStart::new("file-contents");
-        f.push_attribute(("path", path.as_str()));
-        f.push_attribute(("name", name.as_str()));
-        writer.write_event(Event::Start(f))?;
-        // Write file contents as text (escaped)
-        writer.write_event(Event::Text(BytesText::from_escaped(file.contents.as_str())))?;
-        writer.write_event(Event::End(BytesEnd::new("file-contents")))?;
+        xml.push_str(&format!(
+            "    <file-contents path=\"{path}\" name=\"{name}\">\n"
+        ));
+        // Raw contents:
+        xml.push_str(&file.contents);
+        xml.push('\n');
+        xml.push_str("    </file-contents>\n");
     }
-    // Close last folder
     if current_folder.is_some() {
-        writer.write_event(Event::End(BytesEnd::new("folder")))?;
+        xml.push_str("  </folder>\n");
     }
-    // Close root
-    writer.write_event(Event::End(BytesEnd::new("context-gather")))?;
-
-    // Convert buffer to String
-    let buf = writer.into_inner();
-    let s = String::from_utf8(buf)?;
-    Ok(s)
+    xml.push_str("</shared-context>\n");
+    Ok(xml)
 }

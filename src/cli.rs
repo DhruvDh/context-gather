@@ -39,6 +39,10 @@ pub struct Cli {
     #[arg(short = 'c', long = "chunk-size", default_value_t = 0)]
     pub chunk_size: usize,
 
+    /// Which chunk to copy (0-based); -1 means none.
+    #[arg(short = 'k', long = "chunk-index", default_value_t = -1)]
+    pub chunk_index: isize,
+
     /// Insert <more/> markers so an LLM knows additional chunks will follow.
     #[arg(short = 'm', long = "emit-markers")]
     pub emit_markers: bool,
