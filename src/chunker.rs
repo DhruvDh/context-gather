@@ -143,11 +143,17 @@ pub fn build_chunks(
             current_xml.push_str(&wrapped);
             current_toks = part_tok;
         }
+        // Adjust parts count if an empty sub-part was not emitted
+        let parts = if part_tok == 0 && max_parts > 1 {
+            max_parts - 1
+        } else {
+            max_parts
+        };
         metas.push(FileMeta {
             id: file_id,
             path: file.path.clone(),
             tokens: file_tok,
-            parts: max_parts,
+            parts,
         });
         file_id += 1;
     }

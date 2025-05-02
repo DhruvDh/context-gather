@@ -144,10 +144,6 @@ fn main() -> Result<()> {
                 println!("<more/>");
             }
         }
-        if !cli.no_clipboard {
-            clipboard::copy_to_clipboard(header_xml, false)?;
-            println!("✔ copied chunk 0");
-        }
         // Prompt for chunks
         let total = chunks.len();
         println!("▲ There are {} chunks (0..{}).", total, total - 1);
