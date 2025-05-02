@@ -190,9 +190,9 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    // Determine default copy index (interactive defaults to 0 when unset)
+    // Determine default copy index: default to first chunk when unset and clipboard enabled
     let mut copy_idx = cli.chunk_index;
-    if cli.interactive && copy_idx == -1 && !cli.no_clipboard {
+    if copy_idx == -1 && !cli.no_clipboard {
         copy_idx = 0;
     }
     // Non-interactive: handle selected chunk or print all
