@@ -1,4 +1,3 @@
-use assert_fs::TempDir;
 use context_gather::{chunker::*, gather::FileContents};
 use std::path::PathBuf;
 

@@ -2,7 +2,6 @@ mod common;
 use assert_fs::prelude::*;
 use common::basic_fs;
 use context_gather::gather::*;
-use predicates::prelude::*;
 use std::fs;
 
 #[test]

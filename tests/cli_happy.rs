@@ -1,6 +1,6 @@
 use assert_cmd::Command;
 use assert_fs::prelude::*;
-use predicates::str::{contains, starts_with};
+use predicates::str::contains;
 
 #[test]
 fn stdout_only_basic() {
