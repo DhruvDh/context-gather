@@ -49,16 +49,41 @@ pub fn gather_all_file_paths(paths: &[PathBuf]) -> Result<Vec<PathBuf>> {
     let mut results = Vec::new();
 
     for path in paths {
-        // Recursively gather files with `.gitignore` support
+        // Read .gitignore to determine directories to ignore
+        let mut ignore_dirs: Vec<String> = Vec::new();
+        let gi = path.join(".gitignore");
+        if let Ok(s) = fs::read_to_string(&gi) {
+            for line in s.lines() {
+                let pat = line.trim();
+                if pat.is_empty() || pat.starts_with('#') {
+                    continue;
+                }
+                if let Some(dir) = pat.strip_prefix('/') {
+                    let dir = dir.trim_end_matches('/');
+                    ignore_dirs.push(dir.to_string());
+                }
+            }
+        }
+
+        // Recursively gather files, skipping ignored directories
         let walker = WalkBuilder::new(path)
             .follow_links(false) // Adjust if you want to follow symlinks
-            .standard_filters(true) // Respects .gitignore, hidden files, etc.
+            .standard_filters(true) // Respects hidden files and default filters
             .build();
 
         for entry_result in walker {
             match entry_result {
                 Ok(entry) => {
                     if entry.file_type().map(|ft| ft.is_file()).unwrap_or(false) {
+                        // Skip files in ignored directories
+                        if let Ok(rel) = entry.path().strip_prefix(path) {
+                            if let Some(comp) = rel.components().next() {
+                                let name = comp.as_os_str().to_string_lossy();
+                                if ignore_dirs.iter().any(|d| d == &name) {
+                                    continue;
+                                }
+                            }
+                        }
                         results.push(entry.path().to_path_buf());
                     }
                 }
@@ -105,7 +130,7 @@ pub fn count_tokens(text: &str) -> usize {
     tokens.len()
 }
 
-fn read_file(
+pub fn read_file(
     path: &Path,
     max_size: u64,
 ) -> Result<FileContents> {
@@ -118,18 +143,13 @@ fn read_file(
             max_size
         ));
     }
-    // Read the entire file into memory and detect binary
+    // Read the entire file into memory
     let content_bytes = fs::read(path)?;
-    // Simple binary detection: check first 4KiB for non-text bytes
+    // Binary detection: treat invalid UTF-8 in a sample as binary
     let sample_size = content_bytes.len().min(4096);
-    let non_text = content_bytes[..sample_size]
-        .iter()
-        .filter(|&&b| b == 0 || b > 0x7F)
-        .count();
-    if sample_size > 0 && (non_text as f64) / (sample_size as f64) > 0.3 {
+    if sample_size > 0 && std::str::from_utf8(&content_bytes[..sample_size]).is_err() {
         return Err(anyhow!(
-            "Warning: {:?} appears to be a binary file. \
-                            Skipping.",
+            "Warning: {:?} appears to be a binary file. Skipping.",
             path
         ));
     }
@@ -140,4 +160,22 @@ fn read_file(
         path: path.to_path_buf(),
         contents,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{env, fs};
+
+    #[test]
+    fn utf8_non_ascii_is_not_binary() {
+        let dir = env::temp_dir();
+        let fp = dir.join("ctx_gather_test");
+        let s = "é 中文 ";
+        fs::write(&fp, s).unwrap();
+        let files = collect_file_data(&[fp.clone()], u64::MAX).unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].contents, s);
+        let _ = fs::remove_file(&fp);
+    }
 }

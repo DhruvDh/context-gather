@@ -1,4 +1,4 @@
-use context_gather::{xml_output::build_xml, gather::FileContents};
+use context_gather::{gather::FileContents, xml_output::build_xml};
 use std::path::PathBuf;
 
 #[test]

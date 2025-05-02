@@ -115,12 +115,11 @@ pub fn build_chunks(
         let mut part_tok = 0usize;
         let mut part_idx = 1usize;
         // Calculate number of parts with integer division (ceil)
-        let mut max_parts =
-            ((file_tok as u128 + max_tokens as u128 - 1) / max_tokens as u128) as usize;
+        let mut max_parts = (file_tok as u128).div_ceil(max_tokens as u128) as usize;
         if max_parts == 0 {
             max_parts = 1;
         }
-        for line in file.contents.lines() {
+        for line in file.contents.split('\n') {
             let new_tok = count_tokens(line) + 1; // include newline
             if part_tok + new_tok > max_tokens {
                 let wrapped = wrap_part(&file.path, part_idx, max_parts, &part_xml);
