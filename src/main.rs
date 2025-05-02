@@ -2,11 +2,13 @@ mod chunker;
 mod cli;
 mod clipboard;
 mod gather;
+mod header;
 mod interactive;
 mod xml_output;
 
 use std::path::PathBuf;
 
+// use crate::chunker::FileMeta; // removed unused import
 use anyhow::Result;
 use clap::Parser;
 use cli::Cli;
@@ -100,46 +102,142 @@ fn main() -> Result<()> {
     let file_data = gather::collect_file_data(&candidate_files, cli.max_size)?;
     let xml_output = xml_output::build_xml(&file_data)?;
 
-    // 7) Chunking and output streaming
-    let chunks = chunker::chunk_by_tokens(&xml_output, cli.chunk_size);
-    for (idx, part) in chunks.iter().enumerate() {
-        let decorated = if cli.emit_markers {
-            format!(
-                "<context-part index=\"{}\" of=\"{}\">\n{}\n</context-part>",
-                idx + 1,
-                chunks.len(),
-                part
-            )
-        } else {
-            part.clone()
-        };
-
-        // 7a) Clipboard per chunk (soft failure)
-        if !cli.no_clipboard {
-            clipboard::copy_to_clipboard(&decorated, false)?;
-        }
-        // 7b) Stdout per chunk
+    // If chunking disabled (-c 0), output full XML as a single chunk
+    if cli.chunk_size == 0 {
+        // Print XML
         if cli.stdout {
-            println!("{decorated}");
-            if cli.emit_markers && idx + 1 < chunks.len() {
+            println!("{xml_output}");
+        }
+        // Copy to clipboard
+        if !cli.no_clipboard {
+            clipboard::copy_to_clipboard(&xml_output, false)?;
+        }
+        // Summary: one chunk (index 0)
+        let token_count = gather::count_tokens(&xml_output);
+        println!(
+            "✔ {} files • {} tokens • 1 chunk • copied={}",
+            file_data.len(),
+            token_count,
+            if !cli.no_clipboard { "0" } else { "none" }
+        );
+        return Ok(());
+    }
+    // Precompute token count for summary
+    let token_count = gather::count_tokens(&xml_output);
+
+    // 7) Smart chunking with metadata
+    let (mut chunks, metas) = chunker::build_chunks(&file_data, cli.chunk_size);
+    // Prepend header if chunking enabled and multiple chunks
+    if cli.chunk_size > 0 && chunks.len() > 1 {
+        let hdr = header::make_header(chunks.len(), cli.chunk_size, &metas);
+        chunks[0].xml = format!("{hdr}{}", chunks[0].xml);
+    }
+
+    // Interactive mode: prompt to copy/print chunks sequentially
+    if cli.interactive {
+        use std::io::{self, Write};
+        // Print header chunk and marker
+        let header_xml = &chunks[0].xml;
+        if cli.stdout {
+            println!("{header_xml}");
+            if chunks.len() > 1 {
                 println!("<more/>");
             }
         }
+        if !cli.no_clipboard {
+            clipboard::copy_to_clipboard(header_xml, false)?;
+            println!("✔ copied chunk 0");
+        }
+        // Prompt for chunks
+        let total = chunks.len();
+        println!("▲ There are {} chunks (0..{}).", total, total - 1);
+        println!("   Press Enter to copy chunk 0, or enter chunk # to copy/print, or 'q' to quit.");
+        let mut idx = 0usize;
+        loop {
+            print!("[{idx}] > ");
+            io::stdout().flush().unwrap();
+            let mut line = String::new();
+            io::stdin().read_line(&mut line).unwrap();
+            let cmd = line.trim();
+            if cmd == "q" {
+                break;
+            }
+            let n = if cmd.is_empty() {
+                idx
+            } else {
+                match cmd.parse::<usize>() {
+                    Ok(v) if v < total => v,
+                    Ok(v) => {
+                        println!("Invalid chunk index: {}. Range is 0..{}", v, total - 1);
+                        continue;
+                    }
+                    Err(_) => {
+                        println!("Unknown command '{cmd}', enter a number or 'q'");
+                        continue;
+                    }
+                }
+            };
+            // Print and copy selected chunk
+            let xml = &chunks[n].xml;
+            if cli.stdout {
+                println!("{xml}");
+                if n + 1 < total {
+                    println!("<more/>");
+                }
+            }
+            if !cli.no_clipboard {
+                clipboard::copy_to_clipboard(xml, false)?;
+                println!("✔ copied chunk {n}");
+            }
+            idx = (n + 1) % total;
+        }
+        return Ok(());
     }
 
-    // 8) Count tokens and print summary with chunk count
-    let token_count = gather::count_tokens(&xml_output);
+    // Determine default copy index (interactive defaults to 0 when unset)
+    let mut copy_idx = cli.chunk_index;
+    if cli.interactive && copy_idx == -1 && !cli.no_clipboard {
+        copy_idx = 0;
+    }
+    // Non-interactive: handle selected chunk or print all
+    if cli.chunk_index >= 0 && cli.chunk_size == 0 {
+        eprintln!("error: `--chunk-index` requires `--chunk-size`");
+        std::process::exit(2);
+    }
+    if copy_idx >= chunks.len() as isize {
+        eprintln!(
+            "⚠  --chunk-index {} out of range (0..{})",
+            copy_idx,
+            chunks.len().saturating_sub(1)
+        );
+        std::process::exit(3);
+    }
+    for (i, chunk) in chunks.iter().enumerate() {
+        if cli.stdout {
+            println!("{}", chunk.xml);
+            if i + 1 < chunks.len() {
+                println!("<more/>");
+            }
+        }
+        if copy_idx == i as isize {
+            clipboard::copy_to_clipboard(&chunk.xml, false)?;
+        }
+    }
+    // 8) Summary
     println!(
-        "✔ Processed {} files ({} tokens) in {} chunks{}",
+        "✔ {} files • {} tokens • {} chunks • copied={}",
         file_data.len(),
         token_count,
         chunks.len(),
-        if !cli.no_clipboard {
-            " to clipboard"
+        if copy_idx >= 0 {
+            copy_idx.to_string()
         } else {
-            ""
+            "none".into()
         }
     );
+    if cli.no_clipboard && !cli.stdout {
+        eprintln!("Note: neither --stdout nor clipboard copy requested; nothing visible.");
+    }
 
     // 9) Warn if token count exceeds model context limit
     if let Some(limit) = cli.model_context {

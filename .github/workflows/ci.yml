@@ -43,3 +43,7 @@ jobs:
         run: cargo test --verbose
       - name: Smoke run
         run: cargo run -- --help
+      - name: Interactive smoke test
+        run: printf "q\n" | cargo run -- -i -c 1000 -n
+      - name: Auto-copy default
+        run: printf "q\n" | cargo run -- -i -c 3000 README.md
