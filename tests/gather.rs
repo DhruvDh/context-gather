@@ -7,7 +7,7 @@ use std::fs;
 #[test]
 fn expand_paths_glob_and_literal() {
     let td = basic_fs();
-    let src = td.child("src");
+    let _src = td.child("src");
 
     let glob_pat = format!("{}/src/*.rs", td.path().display());
     let mut paths = expand_paths(vec![glob_pat.clone(), "README.md".into()]).unwrap();
