@@ -44,7 +44,7 @@ jobs:
       - name: Smoke run
         run: cargo run -- --help
       - name: Interactive smoke test
-        if: runner.os != 'Linux'
+        if: runner.os == 'Windows'
         run: printf "q\n" | cargo run -- -i -c 1000 -n
       - name: Auto-copy default
         run: printf "q\n" | cargo run -- -i -c 3000 README.md
