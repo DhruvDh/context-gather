@@ -1,0 +1,72 @@
+
+running 2 tests
+test gather::tests::utf8_non_ascii_is_not_binary ... ok
+test chunker::tests::header_token_math ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.58s
+
+
+running 2 tests
+test gather::tests::utf8_non_ascii_is_not_binary ... ok
+test chunker::tests::header_token_math ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.58s
+
+
+running 1 test
+test reassembled_equals_original ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.64s
+
+
+running 3 tests
+test split_across_two_chunks ... ok
+test no_limit_yields_single_chunk ... ok
+test oversize_file_line_split_keeps_order ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.60s
+
+
+running 1 test
+test chunk_size_splits_and_summarizes ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.86s
+
+
+running 2 tests
+test stdout_only_basic ... ok
+test chunk_size_splits_and_summarises ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.60s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 4 tests
+test read_file_skips_binary_and_too_large ... ok
+test expand_paths_glob_and_literal ... ok
+test gather_all_file_paths_respects_gitignore ... ok
+test token_count_is_stable ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.58s
+
+
+running 1 test
+test header_reports_totals_correctly ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 1 test
+test groups_by_folder_and_contains_contents ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.58s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

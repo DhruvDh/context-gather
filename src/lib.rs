@@ -1,7 +1,12 @@
-pub mod chunker;
 pub mod cli;
-pub mod clipboard;
-pub mod gather;
-pub mod header;
-pub mod interactive;
-pub mod xml_output;
+pub mod constants;
+pub mod context;
+pub mod io;
+pub mod tokenizer;
+pub mod ui;
+
+// Re-export modules for backward compatibility
+pub use context::chunker;
+pub use context::gather;
+pub use context::header;
+pub use context::xml as xml_output;

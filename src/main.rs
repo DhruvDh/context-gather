@@ -1,16 +1,16 @@
-mod chunker;
-mod cli;
-mod clipboard;
-mod gather;
-mod header;
-mod interactive;
-mod xml_output;
+// Import modules from the library crate
+use context_gather::chunker;
+use context_gather::cli::Cli;
+use context_gather::gather;
+use context_gather::header;
+use context_gather::io::clipboard;
+use context_gather::ui::select_files_tui;
+use context_gather::xml_output;
 
 use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::Parser;
-use cli::Cli;
 use glob::Pattern;
 use path_slash::PathBufExt;
 
@@ -70,7 +70,7 @@ fn main() -> Result<()> {
 
     // 4) If interactive, open the TUI
     if cli.interactive {
-        candidate_files = match interactive::select_files_tui(candidate_files, &preselected_paths) {
+        candidate_files = match select_files_tui(candidate_files, &preselected_paths) {
             Ok(selected) => selected,
             Err(e) => {
                 eprintln!("Error in interactive TUI: {e}");
@@ -127,7 +127,7 @@ fn main() -> Result<()> {
     // 7) Smart chunking with metadata
     let (mut data_chunks, metas) = chunker::build_chunks(&file_data, cli.chunk_size);
     // Build full set of chunks including header
-    use gather::count_tokens;
+    use context_gather::gather::count_tokens;
     let total_chunks = data_chunks.len() + 1; // +1 for header
     // Create header XML: opens <shared-context> and includes file-map header
     let header_xml = format!(

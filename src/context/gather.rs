@@ -6,8 +6,6 @@ use std::{
 use anyhow::{Result, anyhow};
 use glob::glob;
 use ignore::WalkBuilder;
-use once_cell::sync::Lazy;
-use tiktoken_rs::{CoreBPE, o200k_base};
 
 #[derive(Debug)]
 pub struct FileContents {
@@ -15,9 +13,6 @@ pub struct FileContents {
     pub path: PathBuf,
     pub contents: String,
 }
-
-static TOKENIZER: Lazy<CoreBPE> =
-    Lazy::new(|| o200k_base().expect("Failed to initialize tokenizer"));
 
 pub fn expand_paths(paths: Vec<String>) -> Result<Vec<PathBuf>> {
     let mut expanded = Vec::new();
@@ -126,8 +121,7 @@ pub fn collect_file_data(
 
 /// Returns the number of tokens in the given text.
 pub fn count_tokens(text: &str) -> usize {
-    let tokens = TOKENIZER.encode_with_special_tokens(text);
-    tokens.len()
+    crate::tokenizer::count(text)
 }
 
 pub fn read_file(

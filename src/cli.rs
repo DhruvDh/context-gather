@@ -1,3 +1,4 @@
+use crate::constants::{DEFAULT_CHUNK_SIZE, DEFAULT_MAX_FILE_SIZE};
 use clap::Parser;
 
 #[derive(Parser, Debug)]
@@ -24,7 +25,7 @@ pub struct Cli {
     pub stdout: bool,
 
     /// Maximum file size in bytes before skipping files.
-    #[arg(short = 's', long = "max-size", default_value_t = 1048576)]
+    #[arg(short = 's', long = "max-size", default_value_t = DEFAULT_MAX_FILE_SIZE)]
     pub max_size: u64,
 
     /// Glob patterns to exclude files from processing.
@@ -36,7 +37,7 @@ pub struct Cli {
     pub model_context: Option<usize>,
 
     /// Split the context into chunks no larger than this many tokens. Default = 0 means no chunking.
-    #[arg(short = 'c', long = "chunk-size", default_value_t = 0)]
+    #[arg(short = 'c', long = "chunk-size", default_value_t = DEFAULT_CHUNK_SIZE)]
     pub chunk_size: usize,
 
     /// Which chunk to copy (0-based); -1 means none.
