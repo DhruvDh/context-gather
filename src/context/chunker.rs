@@ -1,5 +1,6 @@
 // Smart chunk builder: structure-aware, token-bounded
-use crate::gather::{FileContents, count_tokens};
+use crate::context::types::FileContents;
+use crate::tokenizer::count as count_tokens;
 use std::path::{Path, PathBuf};
 
 /// Metadata for each file in the context header
@@ -183,7 +184,8 @@ fn wrap_part(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::gather::{FileContents, count_tokens};
+    use crate::context::types::FileContents;
+    use crate::tokenizer::count as count_tokens;
     use std::path::PathBuf;
 
     #[test]

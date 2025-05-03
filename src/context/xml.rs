@@ -1,4 +1,5 @@
-use super::gather::{FileContents, count_tokens};
+use crate::context::types::FileContents;
+use crate::tokenizer::count as count_tokens;
 use anyhow::Result;
 use path_slash::PathBufExt;
 

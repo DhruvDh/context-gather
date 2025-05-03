@@ -357,7 +357,6 @@ dependencies = [
  "path-slash",
  "predicates 2.1.5",
  "proptest",
- "quick-xml",
  "tempfile",
  "tiktoken-rs",
  "tui",

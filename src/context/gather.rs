@@ -1,3 +1,5 @@
+pub use crate::context::types::FileContents;
+
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -6,13 +8,6 @@ use std::{
 use anyhow::{Result, anyhow};
 use glob::glob;
 use ignore::WalkBuilder;
-
-#[derive(Debug)]
-pub struct FileContents {
-    pub folder: PathBuf,
-    pub path: PathBuf,
-    pub contents: String,
-}
 
 pub fn expand_paths(paths: Vec<String>) -> Result<Vec<PathBuf>> {
     let mut expanded = Vec::new();
