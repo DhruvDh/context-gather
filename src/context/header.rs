@@ -13,15 +13,14 @@ pub fn make_header(
     // Build file-map entries
     let mut map = String::new();
     for f in files {
-        writeln!(
+        let _ = writeln!(
             &mut map,
             "    <file id=\"{}\" path=\"{}\" tokens=\"{}\" parts=\"{}\"/>",
             f.id,
             f.path.display(),
             f.tokens,
             f.parts
-        )
-        .unwrap();
+        );
     }
     // Build instructions section with actual chunk count
     let instructions = format!(

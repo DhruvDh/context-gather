@@ -1,6 +1,6 @@
 // Import modules from the library crate
 use context_gather::chunker;
-use context_gather::cli::Cli;
+use context_gather::config::Config;
 use context_gather::gather;
 use context_gather::header;
 use context_gather::io::clipboard;
@@ -10,15 +10,18 @@ use context_gather::xml_output;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use clap::Parser;
 use glob::Pattern;
 use path_slash::PathBufExt;
+use tracing::{error, info, warn};
 
 fn main() -> Result<()> {
-    let cli = Cli::parse();
+    // Initialize tracing for structured logging
+    tracing_subscriber::fmt::init();
+
+    let config = Config::from_cli()?;
 
     // 1) Expand user-specified paths (globs, etc.)
-    let user_paths_raw = gather::expand_paths(cli.paths)?;
+    let user_paths_raw = gather::expand_paths(config.paths)?;
 
     // Helper: check if `candidate` is "under" any user-specified path (including
     // exact matches).
@@ -69,24 +72,28 @@ fn main() -> Result<()> {
         .collect();
 
     // 4) If interactive, open the TUI
-    if cli.interactive {
+    if config.interactive {
         candidate_files = match select_files_tui(candidate_files, &preselected_paths) {
             Ok(selected) => selected,
             Err(e) => {
-                eprintln!("Error in interactive TUI: {e}");
+                error!("Error in interactive TUI: {}", e);
                 std::process::exit(1);
             }
         };
     }
 
     // 5) Exclude patterns: abort if all provided globs are invalid
-    let raw_patterns: Vec<String> = cli.exclude.iter().map(|p| p.replace('\\', "/")).collect();
+    let raw_patterns: Vec<String> = config
+        .exclude
+        .iter()
+        .map(|p| p.replace('\\', "/"))
+        .collect();
     let patterns: Vec<Pattern> = raw_patterns
         .iter()
         .filter_map(|p| Pattern::new(p).ok())
         .collect();
     if !raw_patterns.is_empty() && patterns.is_empty() {
-        eprintln!("Error: every --exclude pattern was invalid: {raw_patterns:?}");
+        error!("Every --exclude pattern was invalid: {:?}", raw_patterns);
         std::process::exit(2);
     }
     if !patterns.is_empty() {
@@ -98,17 +105,17 @@ fn main() -> Result<()> {
     // Exclusion filtering applied
 
     // 6) Read file data and build XML
-    let file_data = gather::collect_file_data(&candidate_files, cli.max_size)?;
+    let file_data = gather::collect_file_data(&candidate_files, config.max_size)?;
     let xml_output = xml_output::build_xml(&file_data)?;
 
     // If chunking disabled (-c 0), output full XML as a single chunk
-    if cli.chunk_size == 0 {
+    if config.chunk_size == 0 {
         // Print XML on stdout if requested or interactive
-        if cli.stdout || cli.interactive {
+        if config.stdout || config.interactive {
             println!("{xml_output}");
         }
         // Copy to clipboard
-        if !cli.no_clipboard {
+        if !config.no_clipboard {
             clipboard::copy_to_clipboard(&xml_output, false)?;
         }
         // Summary: one chunk (index 0)
@@ -117,7 +124,7 @@ fn main() -> Result<()> {
             "✔ {} files • {} tokens • 1 chunk • copied={}",
             file_data.len(),
             token_count,
-            if !cli.no_clipboard { "0" } else { "none" }
+            if !config.no_clipboard { "0" } else { "none" }
         );
         return Ok(());
     }
@@ -125,14 +132,14 @@ fn main() -> Result<()> {
     let token_count = gather::count_tokens(&xml_output);
 
     // 7) Smart chunking with metadata
-    let (mut data_chunks, metas) = chunker::build_chunks(&file_data, cli.chunk_size);
+    let (mut data_chunks, metas) = chunker::build_chunks(&file_data, config.chunk_size);
     // Build full set of chunks including header
     use context_gather::gather::count_tokens;
     let total_chunks = data_chunks.len() + 1; // +1 for header
     // Create header XML: opens <shared-context> and includes file-map header
     let header_xml = format!(
         "<shared-context>\n{}\n",
-        header::make_header(total_chunks, cli.chunk_size, &metas)
+        header::make_header(total_chunks, config.chunk_size, &metas)
     );
     let header_chunk = chunker::Chunk {
         index: 0,
@@ -148,7 +155,7 @@ fn main() -> Result<()> {
     chunks.extend(data_chunks);
 
     // Interactive streaming: copy full XML with context-chunk wrappers
-    if cli.interactive {
+    if config.interactive {
         use std::io::{self, Write};
         let total = chunks.len();
         let mut idx = 0usize;
@@ -174,17 +181,17 @@ fn main() -> Result<()> {
                     idx, total, chunks[idx].xml
                 )
             };
-            if !cli.no_clipboard {
+            if !config.no_clipboard {
                 clipboard::copy_to_clipboard(&snippet, false)?;
                 println!("✔ copied chunk {idx}");
             }
-            if cli.stdout {
+            if config.stdout {
                 print!("{snippet}");
             }
             print!("Enter chunk # (0..{}) or 'q' to quit: ", total - 1);
-            io::stdout().flush().unwrap();
+            io::stdout().flush()?;
             let mut cmd = String::new();
-            io::stdin().read_line(&mut cmd).unwrap();
+            io::stdin().read_line(&mut cmd)?;
             let cmd = cmd.trim();
             if cmd == "q" {
                 break;
@@ -199,18 +206,18 @@ fn main() -> Result<()> {
     }
 
     // Determine default copy index: default to first chunk when unset and clipboard enabled
-    let mut copy_idx = cli.chunk_index;
-    if copy_idx == -1 && !cli.no_clipboard {
+    let mut copy_idx = config.chunk_index;
+    if copy_idx == -1 && !config.no_clipboard {
         copy_idx = 0;
     }
     // Non-interactive: handle selected chunk or print all
-    if cli.chunk_index >= 0 && cli.chunk_size == 0 {
-        eprintln!("error: `--chunk-index` requires `--chunk-size`");
+    if config.chunk_index >= 0 && config.chunk_size == 0 {
+        error!("`--chunk-index` requires `--chunk-size`");
         std::process::exit(2);
     }
     if copy_idx >= chunks.len() as isize {
-        eprintln!(
-            "⚠  --chunk-index {} out of range (0..{})",
+        warn!(
+            "--chunk-index {} out of range (0..{})",
             copy_idx,
             chunks.len().saturating_sub(1)
         );
@@ -237,10 +244,10 @@ fn main() -> Result<()> {
                 i, total_chunks, chunk.xml
             )
         };
-        if cli.stdout {
+        if config.stdout {
             print!("{snippet}");
         }
-        if copy_idx == i as isize && !cli.no_clipboard {
+        if copy_idx == i as isize && !config.no_clipboard {
             clipboard::copy_to_clipboard(&snippet, false)?;
         }
     }
@@ -256,14 +263,17 @@ fn main() -> Result<()> {
             "none".into()
         }
     );
-    if cli.no_clipboard && !cli.stdout {
-        eprintln!("Note: neither --stdout nor clipboard copy requested; nothing visible.");
+    if config.no_clipboard && !config.stdout {
+        info!("Note: neither --stdout nor clipboard copy requested; nothing visible.");
     }
 
     // 9) Warn if token count exceeds model context limit
-    if let Some(limit) = cli.model_context {
+    if let Some(limit) = config.model_context {
         if token_count > limit {
-            eprintln!("Warning: token count {token_count} exceeds model context limit {limit}");
+            warn!(
+                "token count {} exceeds model context limit {}",
+                token_count, limit
+            );
         }
     }
 

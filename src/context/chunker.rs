@@ -35,7 +35,10 @@ pub fn build_chunks(
             let file_block = format!(
                 "    <file-contents path=\"{}\" name=\"{}\">\n{}\n    </file-contents>\n",
                 file.path.display(),
-                file.path.file_name().unwrap().to_string_lossy(),
+                file.path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_default(),
                 file.contents,
             );
             xml_all.push_str(&file_block);
@@ -78,7 +81,10 @@ pub fn build_chunks(
         let file_block = format!(
             "    <file-contents path=\"{}\" name=\"{}\">\n{}\n    </file-contents>\n",
             file.path.display(),
-            file.path.file_name().unwrap().to_string_lossy(),
+            file.path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default(),
             file.contents,
         );
 
@@ -171,10 +177,15 @@ fn wrap_part(
     total: usize,
     body: &str,
 ) -> String {
+    // Safely extract filename, fallback to empty string
+    let filename = path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
     format!(
         "    <file-contents path=\"{}\" name=\"{}\" part=\"{}/{}\">\n{}    </file-contents>\n",
         path.display(),
-        path.file_name().unwrap().to_string_lossy(),
+        filename,
         idx,
         total,
         body

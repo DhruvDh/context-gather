@@ -157,14 +157,15 @@ mod tests {
     use std::{env, fs};
 
     #[test]
-    fn utf8_non_ascii_is_not_binary() {
+    fn utf8_non_ascii_is_not_binary() -> anyhow::Result<()> {
         let dir = env::temp_dir();
         let fp = dir.join("ctx_gather_test");
         let s = "é 中文 ";
-        fs::write(&fp, s).unwrap();
-        let files = collect_file_data(&[fp.clone()], u64::MAX).unwrap();
+        fs::write(&fp, s)?;
+        let files = collect_file_data(&[fp.clone()], u64::MAX)?;
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].contents, s);
         let _ = fs::remove_file(&fp);
+        Ok(())
     }
 }
