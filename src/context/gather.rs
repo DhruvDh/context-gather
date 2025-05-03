@@ -78,7 +78,7 @@ pub fn gather_all_file_paths(paths: &[PathBuf]) -> Result<Vec<PathBuf>> {
                     }
                 }
                 Err(e) => {
-                    eprintln!("Warning: Could not process entry in {path:?}: {e:?}");
+                    tracing::warn!("Could not process entry in {:?}: {:?}", path, e);
                 }
             }
         }
@@ -99,7 +99,7 @@ pub fn collect_file_data(
     for path in file_paths {
         match read_file(path, max_size) {
             Ok(fc) => results.push(fc),
-            Err(e) => eprintln!("{e}"),
+            Err(e) => tracing::warn!("{e}"),
         }
     }
     // Sort by folder then file name

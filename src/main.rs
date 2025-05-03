@@ -13,12 +13,21 @@ use anyhow::Result;
 use glob::Pattern;
 use path_slash::PathBufExt;
 use tracing::{error, info, warn};
+use tracing_subscriber::EnvFilter;
 
 fn main() -> Result<()> {
-    // Initialize tracing for structured logging
-    tracing_subscriber::fmt::init();
+    // Initialize tracing for structured logging, with RUST_LOG support
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .init();
 
     let config = Config::from_cli()?;
+
+    // Pre-validate CLI arg combos: chunk-index requires chunk-size > 0
+    if config.chunk_size == 0 && config.chunk_index >= 0 {
+        error!("--chunk-index requires --chunk-size > 0");
+        std::process::exit(3);
+    }
 
     // 1) Expand user-specified paths (globs, etc.)
     let user_paths_raw = gather::expand_paths(config.paths)?;
@@ -119,13 +128,23 @@ fn main() -> Result<()> {
             clipboard::copy_to_clipboard(&xml_output, false)?;
         }
         // Summary: one chunk (index 0)
-        let token_count = gather::count_tokens(&xml_output);
-        println!(
-            "✔ {} files • {} tokens • 1 chunk • copied={}",
-            file_data.len(),
-            token_count,
-            if !config.no_clipboard { "0" } else { "none" }
-        );
+        let summary = if config.stdout && config.no_clipboard && config.model_context.is_none() {
+            // Skip tokenisation for pure stdout + no-clipboard runs when no model_context
+            format!(
+                "✔ {} files • 1 chunk • copied={}",
+                file_data.len(),
+                if !config.no_clipboard { "0" } else { "none" }
+            )
+        } else {
+            let token_count = gather::count_tokens(&xml_output);
+            format!(
+                "✔ {} files • {} tokens • 1 chunk • copied={}",
+                file_data.len(),
+                token_count,
+                if !config.no_clipboard { "0" } else { "none" }
+            )
+        };
+        println!("{summary}");
         return Ok(());
     }
     // Precompute token count for summary
