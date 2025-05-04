@@ -3,7 +3,7 @@ use std::{panic, path::PathBuf};
 use crate::ui::{tui_events, tui_render, tui_state};
 use anyhow::Result;
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture},
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -13,7 +13,7 @@ pub fn select_files_tui(
     paths: Vec<PathBuf>,
     preselected: &[PathBuf],
 ) -> Result<Vec<PathBuf>> {
-    // Setup panic hook to restore terminal state on panic
+    // Install panic hook to restore terminal on panic
     let default_hook = panic::take_hook();
     panic::set_hook(Box::new(move |info| {
         let _ = disable_raw_mode();
@@ -21,7 +21,7 @@ pub fn select_files_tui(
         default_hook(info);
     }));
 
-    // Initialize UI state
+    // Initialize state
     let mut state = tui_state::UiState::new(paths, preselected);
 
     // Setup terminal
@@ -31,13 +31,13 @@ pub fn select_files_tui(
     let backend = CrosstermBackend::new(std::io::stdout());
     let mut terminal = Terminal::new(backend)?;
 
-    // Main event loop
+    // Event loop
     loop {
-        // Render UI
-        terminal.draw(|f| tui_render::render(f, &state))?;
+        // Render UI; pass mutable reference to state for rendering
+        terminal.draw(|f| tui_render::render(f, &mut state))?;
 
-        // Handle input events
-        let evt = event::read()?;
+        // Handle input
+        let evt: Event = event::read()?;
         if let Some(msg) = tui_events::handle_event(&mut state, evt) {
             match msg {
                 tui_events::UiMsg::Quit => {
