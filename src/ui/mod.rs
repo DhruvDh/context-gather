@@ -1,4 +1,5 @@
 pub mod interactive;
+pub mod stream;
 pub mod tui_events;
 pub mod tui_render;
 pub mod tui_state;

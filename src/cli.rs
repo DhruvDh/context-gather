@@ -13,27 +13,27 @@ pub struct Cli {
     pub paths: Vec<String>,
 
     /// If set, opens the TUI for interactive selection.
-    #[arg(short = 'i', long = "interactive")]
+    #[arg(short = 'i', long = "interactive", default_value_t = false)]
     pub interactive: bool,
 
     /// Do not copy to clipboard.
-    #[arg(short = 'n', long = "no-clipboard")]
+    #[arg(short = 'n', long = "no-clipboard", default_value_t = false)]
     pub no_clipboard: bool,
 
     /// Print XML output to stdout.
-    #[arg(short = 'o', long = "stdout")]
+    #[arg(short = 'o', long = "stdout", default_value_t = false)]
     pub stdout: bool,
 
     /// Maximum file size in bytes before skipping files.
-    #[arg(short = 's', long = "max-size", default_value_t = DEFAULT_MAX_FILE_SIZE)]
+    #[arg(long = "max-size", default_value_t = DEFAULT_MAX_FILE_SIZE)]
     pub max_size: u64,
 
     /// Glob patterns to exclude files from processing.
-    #[arg(short = 'x', long = "exclude")]
+    #[arg(long = "exclude-paths")]
     pub exclude: Vec<String>,
 
     /// Maximum token count for model context; warn if exceeded.
-    #[arg(short = 'L', long = "model-context")]
+    #[arg(long = "model-context", default_value = "200000")]
     pub model_context: Option<usize>,
 
     /// Split the context into chunks no larger than this many tokens. Default = 0 means no chunking.
@@ -45,6 +45,10 @@ pub struct Cli {
     pub chunk_index: isize,
 
     /// Insert <more/> markers so an LLM knows additional chunks will follow.
-    #[arg(short = 'm', long = "emit-markers")]
+    #[arg(short = 'e', long = "emit-markers")]
     pub emit_markers: bool,
+
+    /// Enable multi-step mode: copy only header initially; then serve files on demand.
+    #[arg(short = 'm', long = "multi-step")]
+    pub multi_step: bool,
 }

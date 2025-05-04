@@ -7,7 +7,20 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use tui::{Terminal, backend::CrosstermBackend};
+use tui::{
+    Terminal,
+    backend::{Backend, CrosstermBackend},
+};
+
+/// Clean up terminal state: disable raw mode, exit alternate screen, disable mouse capture, and show cursor.
+fn cleanup_terminal<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
+    disable_raw_mode()?;
+    // Restore terminal screen and disable mouse capture using stdout
+    let mut stdout = std::io::stdout();
+    execute!(stdout, LeaveAlternateScreen, DisableMouseCapture)?;
+    terminal.show_cursor()?;
+    Ok(())
+}
 
 pub fn select_files_tui(
     paths: Vec<PathBuf>,
@@ -41,23 +54,11 @@ pub fn select_files_tui(
         if let Some(msg) = tui_events::handle_event(&mut state, evt) {
             match msg {
                 tui_events::UiMsg::Quit => {
-                    disable_raw_mode()?;
-                    execute!(
-                        terminal.backend_mut(),
-                        LeaveAlternateScreen,
-                        DisableMouseCapture
-                    )?;
-                    terminal.show_cursor()?;
+                    cleanup_terminal(&mut terminal)?;
                     return Ok(vec![]);
                 }
                 tui_events::UiMsg::Submit => {
-                    disable_raw_mode()?;
-                    execute!(
-                        terminal.backend_mut(),
-                        LeaveAlternateScreen,
-                        DisableMouseCapture
-                    )?;
-                    terminal.show_cursor()?;
+                    cleanup_terminal(&mut terminal)?;
                     return Ok(state.selected_paths());
                 }
                 _ => {}

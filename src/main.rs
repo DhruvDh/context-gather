@@ -5,6 +5,7 @@ use context_gather::gather;
 use context_gather::header;
 use context_gather::io::clipboard;
 use context_gather::ui::select_files_tui;
+use context_gather::ui::stream::{multi_step_mode, streaming_mode};
 use context_gather::xml_output;
 
 use std::path::PathBuf;
@@ -30,7 +31,7 @@ fn main() -> Result<()> {
     }
 
     // 1) Expand user-specified paths (globs, etc.)
-    let user_paths_raw = gather::expand_paths(config.paths)?;
+    let user_paths_raw = gather::expand_paths(config.paths.clone())?;
 
     // Helper: check if `candidate` is "under" any user-specified path (including
     // exact matches).
@@ -117,6 +118,34 @@ fn main() -> Result<()> {
     let file_data = gather::collect_file_data(&candidate_files, config.max_size)?;
     let xml_output = xml_output::build_xml(&file_data)?;
 
+    // Build smart chunks and metadata (header plus file parts), needed for multi-step and chunked modes
+    let (mut data_chunks, metas) = chunker::build_chunks(&file_data, config.chunk_size);
+    use context_gather::gather::count_tokens;
+    let total_chunks = data_chunks.len() + 1; // +1 for header
+    // Create header XML: opens <shared-context> and includes file-map header
+    let header_xml = format!(
+        "<shared-context>\n{}\n",
+        header::make_header(total_chunks, config.chunk_size, &metas, config.multi_step)
+    );
+    let header_chunk = chunker::Chunk {
+        index: 0,
+        tokens: count_tokens(&header_xml),
+        xml: header_xml,
+    };
+    // Renumber data chunks and prepend header
+    for (i, chunk) in data_chunks.iter_mut().enumerate() {
+        chunk.index = i + 1;
+    }
+    let mut chunks = Vec::with_capacity(total_chunks);
+    chunks.push(header_chunk);
+    chunks.extend(data_chunks);
+
+    // Multi-step mode: copy header only initially, then serve files on demand
+    if config.multi_step {
+        multi_step_mode(&chunks, &file_data, &config)?;
+        return Ok(());
+    }
+
     // If chunking disabled (-c 0), output full XML as a single chunk
     if config.chunk_size == 0 {
         // Print XML on stdout if requested or interactive
@@ -147,80 +176,10 @@ fn main() -> Result<()> {
         println!("{summary}");
         return Ok(());
     }
-    // Precompute token count for summary
-    let token_count = gather::count_tokens(&xml_output);
-
-    // 7) Smart chunking with metadata
-    let (mut data_chunks, metas) = chunker::build_chunks(&file_data, config.chunk_size);
-    // Build full set of chunks including header
-    use context_gather::gather::count_tokens;
-    let total_chunks = data_chunks.len() + 1; // +1 for header
-    // Create header XML: opens <shared-context> and includes file-map header
-    let header_xml = format!(
-        "<shared-context>\n{}\n",
-        header::make_header(total_chunks, config.chunk_size, &metas)
-    );
-    let header_chunk = chunker::Chunk {
-        index: 0,
-        tokens: count_tokens(&header_xml),
-        xml: header_xml,
-    };
-    // Renumber data chunks and prepend header
-    for (i, chunk) in data_chunks.iter_mut().enumerate() {
-        chunk.index = i + 1;
-    }
-    let mut chunks = Vec::with_capacity(total_chunks);
-    chunks.push(header_chunk);
-    chunks.extend(data_chunks);
 
     // Interactive streaming: copy full XML with context-chunk wrappers
     if config.interactive {
-        use std::io::{self, Write};
-        let total = chunks.len();
-        let mut idx = 0usize;
-        println!("▲ Streaming {} chunks (0..{}).", total, total - 1);
-        loop {
-            let rem = total - idx - 1;
-            // Build snippet for this chunk
-            let snippet = if idx == 0 {
-                // Header: includes opening <shared-context> and header
-                let mut s = chunks[0].xml.clone();
-                if rem > 0 {
-                    s.push_str(&format!("<more remaining=\"{rem}\"/>\n"));
-                }
-                s
-            } else if rem > 0 {
-                format!(
-                    "<context-chunk id=\"{}/{}\">\n{}</context-chunk>\n<more remaining=\"{}\"/>\n",
-                    idx, total, chunks[idx].xml, rem
-                )
-            } else {
-                format!(
-                    "<context-chunk id=\"{}/{}\">\n{}</context-chunk>\n</shared-context>\n",
-                    idx, total, chunks[idx].xml
-                )
-            };
-            if !config.no_clipboard {
-                clipboard::copy_to_clipboard(&snippet, false)?;
-                println!("✔ copied chunk {idx}");
-            }
-            if config.stdout {
-                print!("{snippet}");
-            }
-            print!("Enter chunk # (0..{}) or 'q' to quit: ", total - 1);
-            io::stdout().flush()?;
-            let mut cmd = String::new();
-            io::stdin().read_line(&mut cmd)?;
-            let cmd = cmd.trim();
-            if cmd == "q" {
-                break;
-            }
-            idx = if cmd.is_empty() {
-                (idx + 1) % total
-            } else {
-                cmd.parse().unwrap_or(idx)
-            };
-        }
+        streaming_mode(&chunks, &config)?;
         return Ok(());
     }
 
@@ -274,7 +233,7 @@ fn main() -> Result<()> {
     println!(
         "✔ {} files • {} tokens • {} chunks • copied={}",
         file_data.len(),
-        token_count,
+        count_tokens(&xml_output),
         chunks.len(),
         if copy_idx >= 0 {
             copy_idx.to_string()
@@ -288,10 +247,11 @@ fn main() -> Result<()> {
 
     // 9) Warn if token count exceeds model context limit
     if let Some(limit) = config.model_context {
-        if token_count > limit {
+        if count_tokens(&xml_output) > limit {
             warn!(
                 "token count {} exceeds model context limit {}",
-                token_count, limit
+                count_tokens(&xml_output),
+                limit
             );
         }
     }
