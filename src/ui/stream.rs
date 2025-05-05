@@ -25,6 +25,8 @@ pub fn multi_step_mode(
     if !config.no_clipboard {
         clipboard::copy_to_clipboard(&snippet, false)?;
     }
+    // Display REPL instructions
+    println!("Commands: enter file ids, file paths, or glob patterns; type 'q' to quit.");
 
     // REPL for on-demand file requests
     loop {
@@ -95,6 +97,8 @@ pub fn streaming_mode(
     let total = chunks.len();
     let mut idx = 0usize;
     println!("▲ Streaming {total} chunks (0..{}).", total - 1);
+    // Display REPL instructions
+    println!("Commands: press Enter for next chunk, number to jump, or 'q' to quit.");
     loop {
         let rem = total - idx - 1;
         let snippet = if idx == 0 {

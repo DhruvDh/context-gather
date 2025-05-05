@@ -14,10 +14,14 @@ pub fn render<B: Backend>(
     frame: &mut Frame<B>,
     state: &mut UiState,
 ) {
-    // Split screen: search bar (3 lines) and list area
+    // Layout: search bar (3 lines), list area, then help bar
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(3), Constraint::Min(1)])
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Min(1),
+            Constraint::Length(1),
+        ])
         .split(frame.size());
 
     // Search bar title and input binding
@@ -149,4 +153,16 @@ pub fn render<B: Backend>(
             .highlight_style(Style::default().bg(Color::Blue));
         frame.render_stateful_widget(widget, area, &mut list_state);
     }
+
+    // Help bar at bottom
+    let help_text = vec![
+        Span::styled("↑/↓: Navigate  ", Style::default().fg(Color::Yellow)),
+        Span::styled("Space: Toggle  ", Style::default().fg(Color::Yellow)),
+        Span::styled("Enter: Submit  ", Style::default().fg(Color::Yellow)),
+        Span::styled("Ctrl+E: Ext  ", Style::default().fg(Color::Yellow)),
+        Span::styled("q: Quit", Style::default().fg(Color::Yellow)),
+    ];
+    let help_bar =
+        Paragraph::new(Spans::from(help_text)).block(Block::default().borders(Borders::ALL));
+    frame.render_widget(help_bar, chunks[2]);
 }

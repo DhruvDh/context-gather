@@ -140,16 +140,22 @@ fn main() -> Result<()> {
     chunks.push(header_chunk);
     chunks.extend(data_chunks);
 
-    // Multi-step mode: copy header only initially, then serve files on demand
+    // Multi-step mode: REPL for fetching files on demand
     if config.multi_step {
         multi_step_mode(&chunks, &file_data, &config)?;
         return Ok(());
     }
 
+    // Chunked mode interactive REPL: only when interactive flag is set
+    if config.chunk_size > 0 && config.interactive {
+        streaming_mode(&chunks, &config)?;
+        return Ok(());
+    }
+
     // If chunking disabled (-c 0), output full XML as a single chunk
     if config.chunk_size == 0 {
-        // Print XML on stdout if requested or interactive
-        if config.stdout || config.interactive {
+        // Print XML on stdout if requested
+        if config.stdout {
             println!("{xml_output}");
         }
         // Copy to clipboard
@@ -174,12 +180,6 @@ fn main() -> Result<()> {
             )
         };
         println!("{summary}");
-        return Ok(());
-    }
-
-    // Interactive streaming: copy full XML with context-chunk wrappers
-    if config.interactive {
-        streaming_mode(&chunks, &config)?;
         return Ok(());
     }
 

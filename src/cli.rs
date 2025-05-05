@@ -12,7 +12,7 @@ pub struct Cli {
     #[arg(default_value = ".", num_args(1..))]
     pub paths: Vec<String>,
 
-    /// If set, opens the TUI for interactive selection.
+    /// Open interactive TUI for file selection and chunk browsing (use with -c or -m for chunked/multi-step UIs).
     #[arg(short = 'i', long = "interactive", default_value_t = false)]
     pub interactive: bool,
 
@@ -36,7 +36,7 @@ pub struct Cli {
     #[arg(long = "model-context", default_value = "200000")]
     pub model_context: Option<usize>,
 
-    /// Split the context into chunks no larger than this many tokens. Default = 0 means no chunking.
+    /// Split the context into chunks no larger than this many tokens (use with -i to browse chunks in TUI).
     #[arg(short = 'c', long = "chunk-size", default_value_t = DEFAULT_CHUNK_SIZE)]
     pub chunk_size: usize,
 
@@ -48,7 +48,7 @@ pub struct Cli {
     #[arg(short = 'e', long = "emit-markers")]
     pub emit_markers: bool,
 
-    /// Enable multi-step mode: copy only header initially; then serve files on demand.
+    /// Enable multi-step mode: copy only header initially; then serve files on demand (use -i for TUI file picker).
     #[arg(short = 'm', long = "multi-step")]
     pub multi_step: bool,
 }
