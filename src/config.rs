@@ -11,7 +11,7 @@ pub struct Config {
     pub stdout: bool,
     pub max_size: u64,
     pub exclude: Vec<String>,
-    pub model_context: Option<usize>,
+    pub model_context: usize,
     pub chunk_size: usize,
     pub chunk_index: isize,
     pub emit_markers: bool,
