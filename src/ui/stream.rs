@@ -123,7 +123,7 @@ pub fn streaming_mode(
         }
         if !config.no_clipboard {
             clipboard::copy_to_clipboard(&snippet, false)?;
-            println!("✔ copied chunk {idx}");
+            println!("Copied chunk {idx}");
         }
         print!("Enter chunk # (0..{}) or 'q' to quit: ", total - 1);
         io::stdout().flush()?;

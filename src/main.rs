@@ -166,14 +166,14 @@ fn main() -> Result<()> {
         let summary = if config.stdout && config.no_clipboard && config.model_context.is_none() {
             // Skip tokenisation for pure stdout + no-clipboard runs when no model_context
             format!(
-                "✔ {} files • 1 chunk • copied={}",
+                "OK {} files • 1 chunk • copied={}",
                 file_data.len(),
                 if !config.no_clipboard { "0" } else { "none" }
             )
         } else {
             let token_count = gather::count_tokens(&xml_output);
             format!(
-                "✔ {} files • {} tokens • 1 chunk • copied={}",
+                "OK {} files • {} tokens • 1 chunk • copied={}",
                 file_data.len(),
                 token_count,
                 if !config.no_clipboard { "0" } else { "none" }
@@ -231,7 +231,7 @@ fn main() -> Result<()> {
     }
     // 8) Summary
     println!(
-        "✔ {} files • {} tokens • {} chunks • copied={}",
+        "OK {} files • {} tokens • {} chunks • copied={}",
         file_data.len(),
         count_tokens(&xml_output),
         chunks.len(),
