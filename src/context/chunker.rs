@@ -31,7 +31,6 @@ pub fn build_chunks(
         let mut metas = Vec::new();
         let mut xml_all = String::new();
         for (file_id, file) in files.iter().enumerate() {
-            let file_tok = count_tokens(&file.contents);
             let file_block = format!(
                 "    <file-contents path=\"{}\" name=\"{}\">\n{}\n    </file-contents>\n",
                 file.path.display(),
@@ -41,6 +40,7 @@ pub fn build_chunks(
                     .unwrap_or_default(),
                 file.contents,
             );
+            let file_tok = count_tokens(&file_block);
             xml_all.push_str(&file_block);
             metas.push(FileMeta {
                 id: file_id,
@@ -77,7 +77,6 @@ pub fn build_chunks(
     };
 
     for file in files {
-        let file_tok = count_tokens(&file.contents);
         let file_block = format!(
             "    <file-contents path=\"{}\" name=\"{}\">\n{}\n    </file-contents>\n",
             file.path.display(),
@@ -87,6 +86,7 @@ pub fn build_chunks(
                 .unwrap_or_default(),
             file.contents,
         );
+        let file_tok = count_tokens(&file_block);
 
         // fits entirely in current chunk
         if current_toks + file_tok <= max_tokens {
@@ -120,24 +120,29 @@ pub fn build_chunks(
 
         // oversize file: split into parts by lines
         let mut part_xml = String::new();
-        let mut part_tok = 0usize;
+        let mut part_tok = 0usize; // body token count
         let mut part_idx = 1usize;
+        let mut total_file_tokens = 0usize;
         // Calculate number of parts with integer division (ceil)
         let mut max_parts = (file_tok as u128).div_ceil(max_tokens as u128) as usize;
         if max_parts == 0 {
             max_parts = 1;
         }
+        let mut overhead = count_tokens(&wrap_part(&file.path, part_idx, max_parts, ""));
         for line in file.contents.split('\n') {
             let new_tok = count_tokens(line) + 1; // include newline
-            if part_tok + new_tok > max_tokens {
+            if part_tok + new_tok + overhead > max_tokens {
                 let wrapped = wrap_part(&file.path, part_idx, max_parts, &part_xml);
                 push_chunk(&mut current_xml, &mut current_toks, chunk_idx);
+                let wrapped_tok = count_tokens(&wrapped);
                 current_xml.push_str(&wrapped);
-                current_toks = part_tok;
+                current_toks = wrapped_tok;
+                total_file_tokens += wrapped_tok;
                 chunk_idx += 1;
                 part_xml.clear();
                 part_tok = 0;
                 part_idx += 1;
+                overhead = count_tokens(&wrap_part(&file.path, part_idx, max_parts, ""));
             }
             part_xml.push_str(line);
             part_xml.push('\n');
@@ -147,8 +152,10 @@ pub fn build_chunks(
         if !part_xml.is_empty() {
             let wrapped = wrap_part(&file.path, part_idx, max_parts, &part_xml);
             push_chunk(&mut current_xml, &mut current_toks, chunk_idx);
+            let wrapped_tok = count_tokens(&wrapped);
             current_xml.push_str(&wrapped);
-            current_toks = part_tok;
+            current_toks = wrapped_tok;
+            total_file_tokens += wrapped_tok;
         }
         // Adjust parts count if an empty sub-part was not emitted
         let parts = if part_tok == 0 && max_parts > 1 {
@@ -159,7 +166,7 @@ pub fn build_chunks(
         metas.push(FileMeta {
             id: file_id,
             path: file.path.clone(),
-            tokens: file_tok,
+            tokens: total_file_tokens,
             parts,
         });
         file_id += 1;
