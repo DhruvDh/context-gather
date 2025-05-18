@@ -14,7 +14,7 @@ pub fn copy_to_clipboard(
             if fail_hard {
                 return Err(anyhow::anyhow!("Clipboard init failed: {:?}", e));
             } else {
-                tracing::warn!("⚠️  Clipboard unavailable: {:?}", e);
+                tracing::warn!("WARNING: Clipboard unavailable: {:?}", e);
                 return Ok(());
             }
         }
@@ -24,7 +24,7 @@ pub fn copy_to_clipboard(
         if fail_hard {
             return Err(anyhow::anyhow!("Clipboard copy failed: {:?}", e));
         } else {
-            tracing::warn!("⚠️  Clipboard copy failed: {:?}", e);
+            tracing::warn!("WARNING: Clipboard copy failed: {:?}", e);
         }
     }
     Ok(())
