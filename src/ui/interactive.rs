@@ -28,10 +28,11 @@ pub fn select_files_tui(
 ) -> Result<Vec<PathBuf>> {
     // Install panic hook to restore terminal on panic
     let default_hook = panic::take_hook();
+    let default_hook_ptr = &default_hook as *const _;
     panic::set_hook(Box::new(move |info| {
         let _ = disable_raw_mode();
         let _ = execute!(std::io::stdout(), LeaveAlternateScreen, DisableMouseCapture);
-        default_hook(info);
+        unsafe { (*default_hook_ptr)(info); }
     }));
 
     // Initialize state
@@ -55,10 +56,12 @@ pub fn select_files_tui(
             match msg {
                 tui_events::UiMsg::Quit => {
                     cleanup_terminal(&mut terminal)?;
+                    panic::set_hook(default_hook);
                     return Ok(vec![]);
                 }
                 tui_events::UiMsg::Submit => {
                     cleanup_terminal(&mut terminal)?;
+                    panic::set_hook(default_hook);
                     return Ok(state.selected_paths());
                 }
                 _ => {}
