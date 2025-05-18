@@ -39,41 +39,17 @@ pub fn gather_all_file_paths(paths: &[PathBuf]) -> Result<Vec<PathBuf>> {
     let mut results = Vec::new();
 
     for path in paths {
-        // Read .gitignore to determine directories to ignore
-        let mut ignore_dirs: Vec<String> = Vec::new();
-        let gi = path.join(".gitignore");
-        if let Ok(s) = fs::read_to_string(&gi) {
-            for line in s.lines() {
-                let pat = line.trim();
-                if pat.is_empty() || pat.starts_with('#') {
-                    continue;
-                }
-                if let Some(dir) = pat.strip_prefix('/') {
-                    let dir = dir.trim_end_matches('/');
-                    ignore_dirs.push(dir.to_string());
-                }
-            }
-        }
-
-        // Recursively gather files, skipping ignored directories
+        // Recursively gather files, letting WalkBuilder handle ignore files
         let walker = WalkBuilder::new(path)
             .follow_links(false) // Adjust if you want to follow symlinks
             .standard_filters(true) // Respects hidden files and default filters
+            .add_custom_ignore_filename(".gitignore")
             .build();
 
         for entry_result in walker {
             match entry_result {
                 Ok(entry) => {
                     if entry.file_type().map(|ft| ft.is_file()).unwrap_or(false) {
-                        // Skip files in ignored directories
-                        if let Ok(rel) = entry.path().strip_prefix(path) {
-                            if let Some(comp) = rel.components().next() {
-                                let name = comp.as_os_str().to_string_lossy();
-                                if ignore_dirs.iter().any(|d| d == &name) {
-                                    continue;
-                                }
-                            }
-                        }
                         results.push(entry.path().to_path_buf());
                     }
                 }
