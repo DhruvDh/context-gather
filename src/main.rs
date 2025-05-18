@@ -163,22 +163,13 @@ fn main() -> Result<()> {
             clipboard::copy_to_clipboard(&xml_output, false)?;
         }
         // Summary: one chunk (index 0)
-        let summary = if config.stdout && config.no_clipboard && config.model_context.is_none() {
-            // Skip tokenisation for pure stdout + no-clipboard runs when no model_context
-            format!(
-                "✔ {} files • 1 chunk • copied={}",
-                file_data.len(),
-                if !config.no_clipboard { "0" } else { "none" }
-            )
-        } else {
-            let token_count = gather::count_tokens(&xml_output);
-            format!(
-                "✔ {} files • {} tokens • 1 chunk • copied={}",
-                file_data.len(),
-                token_count,
-                if !config.no_clipboard { "0" } else { "none" }
-            )
-        };
+        let token_count = gather::count_tokens(&xml_output);
+        let summary = format!(
+            "✔ {} files • {} tokens • 1 chunk • copied={}",
+            file_data.len(),
+            token_count,
+            if !config.no_clipboard { "0" } else { "none" }
+        );
         println!("{summary}");
         return Ok(());
     }
@@ -246,14 +237,12 @@ fn main() -> Result<()> {
     }
 
     // 9) Warn if token count exceeds model context limit
-    if let Some(limit) = config.model_context {
-        if count_tokens(&xml_output) > limit {
-            warn!(
-                "token count {} exceeds model context limit {}",
-                count_tokens(&xml_output),
-                limit
-            );
-        }
+    if count_tokens(&xml_output) > config.model_context {
+        warn!(
+            "token count {} exceeds model context limit {}",
+            count_tokens(&xml_output),
+            config.model_context
+        );
     }
 
     Ok(())

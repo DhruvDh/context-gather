@@ -33,8 +33,8 @@ pub struct Cli {
     pub exclude: Vec<String>,
 
     /// Maximum token count for model context; warn if exceeded.
-    #[arg(long = "model-context", default_value = "200000")]
-    pub model_context: Option<usize>,
+    #[arg(long = "model-context", default_value_t = 200000)]
+    pub model_context: usize,
 
     /// Split the context into chunks no larger than this many tokens (use with -i to browse chunks in TUI).
     #[arg(short = 'c', long = "chunk-size", default_value_t = DEFAULT_CHUNK_SIZE)]
