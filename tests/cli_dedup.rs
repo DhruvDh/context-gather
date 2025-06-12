@@ -13,6 +13,6 @@ fn dir_and_file_are_deduped() {
         .args(["--stdout", "--no-clipboard", ".", "foo.txt"])
         .assert()
         .success()
-        .stdout(contains("✔ 1 files"))
+        .stdout(contains("OK 1 files"))
         .stderr(is_empty());
 }

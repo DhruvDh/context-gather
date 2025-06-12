@@ -1,6 +1,7 @@
 use assert_cmd::Command;
 use assert_fs::prelude::*;
 use predicates::str::contains;
+use predicates::prelude::*;
 
 #[test]
 fn chunk_size_splits_and_summarizes() {

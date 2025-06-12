@@ -15,7 +15,7 @@ use tui::{
 
 /// RAII guard that restores the previous panic hook on drop.
 struct HookGuard {
-    original: Arc<dyn Fn(&panic::PanicInfo<'_>) + Send + Sync + 'static>,
+    original: Arc<dyn Fn(&panic::PanicHookInfo<'_>) + Send + Sync + 'static>,
 }
 
 impl Drop for HookGuard {
@@ -41,7 +41,7 @@ pub fn select_files_tui(
 ) -> Result<Vec<PathBuf>> {
     // Install panic hook to restore terminal on panic
     let default_hook = panic::take_hook();
-    let default_hook: Arc<dyn Fn(&panic::PanicInfo<'_>) + Send + Sync + 'static> = default_hook.into();
+    let default_hook: Arc<dyn Fn(&panic::PanicHookInfo<'_>) + Send + Sync + 'static> = default_hook.into();
     let _guard = HookGuard { original: default_hook.clone() };
     panic::set_hook(Box::new({
         let dh = default_hook.clone();
