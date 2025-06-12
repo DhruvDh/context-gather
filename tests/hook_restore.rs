@@ -8,7 +8,7 @@ static HOOK_CALLED: AtomicBool = AtomicBool::new(false);
 #[test]
 fn tui_restores_panic_hook() {
     // Custom hook that flips a flag when invoked
-    let custom_hook = Box::new(|_: &panic::PanicInfo<'_>| {
+    let custom_hook = Box::new(|_: &panic::PanicHookInfo<'_>| {
         HOOK_CALLED.store(true, Ordering::SeqCst);
     });
     let orig = panic::take_hook();
