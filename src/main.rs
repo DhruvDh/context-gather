@@ -73,6 +73,10 @@ fn main() -> Result<()> {
         candidate_files.extend(gather::gather_all_file_paths(&dirs_to_scan)?);
     }
 
+    // Deduplicate combined list of explicit files and scanned directories
+    candidate_files.sort();
+    candidate_files.dedup();
+
     // 3) Among those gathered, preselect anything "under" or exactly matching user
     //    paths
     let preselected_paths: Vec<PathBuf> = candidate_files
