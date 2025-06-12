@@ -105,6 +105,8 @@ pub fn streaming_mode(
             let mut s = chunks[0].xml.clone();
             if rem > 0 {
                 s.push_str(&format!("<more remaining=\"{}\"/>\n", rem));
+            } else {
+                s.push_str("</shared-context>\n");
             }
             s
         } else if rem > 0 {
