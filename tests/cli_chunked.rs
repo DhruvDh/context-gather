@@ -19,7 +19,7 @@ fn chunk_size_splits_and_summarizes() {
         .success()
         .stdout(contains("<context-chunk id=\""))
         .stdout(contains("<more remaining=\"")) // the marker printed between chunks
-        .stdout(contains("✔")) // summary line
+        .stdout(contains("OK")) // summary line
         .stderr(predicates::str::is_empty());
 }
 
