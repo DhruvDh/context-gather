@@ -44,9 +44,6 @@ pub struct Cli {
     #[arg(short = 'k', long = "chunk-index", default_value_t = -1)]
     pub chunk_index: isize,
 
-    /// Insert <more/> markers so an LLM knows additional chunks will follow.
-    #[arg(short = 'e', long = "emit-markers")]
-    pub emit_markers: bool,
 
     /// Enable multi-step mode: copy only header initially; then serve files on demand (use -i for TUI file picker).
     #[arg(short = 'm', long = "multi-step")]
