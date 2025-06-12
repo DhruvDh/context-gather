@@ -73,7 +73,12 @@ fn main() -> Result<()> {
         candidate_files.extend(gather::gather_all_file_paths(&dirs_to_scan)?);
     }
 
-    // Deduplicate combined list of explicit files and scanned directories
+    // Canonicalize and deduplicate explicit and discovered files
+    for path in &mut candidate_files {
+        if let Ok(canon) = dunce::canonicalize(&*path) {
+            *path = canon;
+        }
+    }
     candidate_files.sort();
     candidate_files.dedup();
 
