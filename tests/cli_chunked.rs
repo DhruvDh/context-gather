@@ -22,3 +22,19 @@ fn chunk_size_splits_and_summarizes() {
         .stdout(contains("✔")) // summary line
         .stderr(predicates::str::is_empty());
 }
+
+#[test]
+fn zero_files_outputs_header_with_closing_tag() {
+    let dir = assert_fs::TempDir::new().unwrap();
+
+    Command::cargo_bin("context-gather")
+        .unwrap()
+        .current_dir(&dir)
+        .args(["--stdout", "--no-clipboard", "-c", "50", "."])
+        .assert()
+        .success()
+        .stdout(contains("</shared-context>"))
+        .stdout(contains("<context-chunk id=").not())
+        .stdout(predicates::str::is_empty().not())
+        .stderr(predicates::str::is_empty());
+}

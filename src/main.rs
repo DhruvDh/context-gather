@@ -209,6 +209,8 @@ fn main() -> Result<()> {
             let mut s = chunk.xml.clone();
             if rem > 0 {
                 s.push_str(&format!("<more remaining=\"{rem}\"/>\n"));
+            } else {
+                s.push_str("</shared-context>\n");
             }
             s
         } else if rem > 0 {
