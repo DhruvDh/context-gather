@@ -28,15 +28,15 @@ fn apply_extension_items(
     all_known_exts: &HashSet<String>,
 ) {
     for (p, checked) in items.iter_mut() {
-        if let Some(pext) = p.extension().map(|e| format!(".{}", e.to_string_lossy())) {
-            if all_known_exts.contains(&pext) {
-                if union_mode {
-                    if chosen_exts.contains(&pext) {
-                        *checked = true;
-                    }
-                } else {
-                    *checked = chosen_exts.contains(&pext);
+        if let Some(pext) = p.extension().map(|e| format!(".{}", e.to_string_lossy()))
+            && all_known_exts.contains(&pext)
+        {
+            if union_mode {
+                if chosen_exts.contains(&pext) {
+                    *checked = true;
                 }
+            } else {
+                *checked = chosen_exts.contains(&pext);
             }
         }
     }

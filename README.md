@@ -52,16 +52,16 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.95"
 clap = { version = "4.4.6", features = ["derive"] }
-copypasta = "0.10.1"
-crossterm = "0.28.1"
+crossterm = "0.29.0"
 glob = "0.3.2"
-tiktoken-rs = "0.6.0"
+tiktoken-rs = "0.7.0"
 tui = "0.19.0"
-path-slash = "0.1.5"
+path-slash = "0.2.1"
 once_cell = "1.17.2"
 dunce = "1.0.5"
 quick-xml = "0.37.5"
 chrono = "0.4.41"
+cli-clipboard = "0.4.0"
 ```
 
 (Adjust versions to the latest semver releases as needed.)
@@ -362,17 +362,29 @@ Note that escaping may be helpful if you want to ensure valid XML. You can skip 
 
 ## 8. Clipboard Integration (in `clipboard.rs`)
 
-Using [`copypasta`](https://crates.io/crates/copypasta):
+Using [`cli-clipboard`](https://crates.io/crates/cli-clipboard) for Wayland-safe CLIs:
 
 ```rust
-use anyhow::Result;
-use copypasta::{ClipboardContext, ClipboardProvider};
+use anyhow::{Result, anyhow};
+use cli_clipboard::{ClipboardContext, ClipboardProvider};
 
 pub fn copy_to_clipboard(text: &str) -> Result<()> {
-    let mut ctx = ClipboardContext::new()
-        .map_err(|e| anyhow::anyhow!("Failed to create clipboard context: {:?}", e))?;
-    ctx.set_contents(text.to_string())
-        .map_err(|e| anyhow::anyhow!("Failed to copy to clipboard: {:?}", e))?;
+    let mut ctx = ClipboardContext::new().map_err(|e| anyhow!("init clipboard: {e}"))?;
+    ctx.set_contents(text.to_owned())
+        .map_err(|e| anyhow!("set clipboard contents: {e}"))?;
+    Ok(())
+}
+```
+
+If you want a resilient fallback for headless environments, wrap the call so failures
+fall back to stdout instead of aborting:
+
+```rust
+pub fn copy_or_stdout(text: &str) -> Result<()> {
+    if let Err(err) = copy_to_clipboard(text) {
+        eprintln!("clipboard unavailable ({err}); writing to stdout instead");
+        print!("{text}");
+    }
     Ok(())
 }
 ```

@@ -26,12 +26,15 @@ pub fn multi_step_mode(
         clipboard::copy_to_clipboard(&snippet, false)?;
     }
     // Display REPL instructions
-    println!("Commands: enter file ids, file paths, or glob patterns; type 'q' to quit.");
+    eprintln!("Commands: enter file ids, file paths, or glob patterns; type 'q' to quit.");
 
     // REPL for on-demand file requests
     loop {
-        print!("Request file id or glob (or 'q' to quit): ");
-        io::stdout().flush()?;
+        {
+            let mut ui = io::stderr();
+            write!(ui, "Request file id or glob (or 'q' to quit): ")?;
+            ui.flush()?;
+        }
         let mut cmd = String::new();
         io::stdin().read_line(&mut cmd)?;
         let cmd = cmd.trim();
@@ -82,7 +85,7 @@ pub fn multi_step_mode(
             }
             if !config.no_clipboard {
                 clipboard::copy_to_clipboard(&out, false)?;
-                println!("Copied file id {}", id);
+                eprintln!("Copied file id {}", id);
             }
         }
     }
@@ -96,9 +99,9 @@ pub fn streaming_mode(
 ) -> Result<()> {
     let total = chunks.len();
     let mut idx = 0usize;
-    println!("▲ Streaming {total} chunks (0..{}).", total - 1);
+    eprintln!("▲ Streaming {total} chunks (0..{}).", total - 1);
     // Display REPL instructions
-    println!("Commands: press Enter for next chunk, number to jump, or 'q' to quit.");
+    eprintln!("Commands: press Enter for next chunk, number to jump, or 'q' to quit.");
     loop {
         let rem = total - idx - 1;
         let snippet = if idx == 0 {
@@ -125,10 +128,13 @@ pub fn streaming_mode(
         }
         if !config.no_clipboard {
             clipboard::copy_to_clipboard(&snippet, false)?;
-            println!("Copied chunk {idx}");
+            eprintln!("Copied chunk {idx}");
         }
-        print!("Enter chunk # (0..{}) or 'q' to quit: ", total - 1);
-        io::stdout().flush()?;
+        {
+            let mut ui = io::stderr();
+            write!(ui, "Enter chunk # (0..{}) or 'q' to quit: ", total - 1)?;
+            ui.flush()?;
+        }
         let mut cmd = String::new();
         io::stdin().read_line(&mut cmd)?;
         let cmd = cmd.trim();

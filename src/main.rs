@@ -241,10 +241,11 @@ fn main() -> Result<()> {
         }
     }
     // 8) Summary
+    let total_token_count = count_tokens(&xml_output);
     println!(
         "OK {} files • {} tokens • {} chunks • copied={}",
         file_data.len(),
-        count_tokens(&xml_output),
+        total_token_count,
         chunks.len(),
         if copy_idx >= 0 {
             copy_idx.to_string()
@@ -257,14 +258,13 @@ fn main() -> Result<()> {
     }
 
     // 9) Warn if token count exceeds model context limit
-    if let Some(limit) = config.model_context {
-        if count_tokens(&xml_output) > limit {
-            warn!(
-                "token count {} exceeds model context limit {}",
-                count_tokens(&xml_output),
-                limit
-            );
-        }
+    if let Some(limit) = config.model_context
+        && total_token_count > limit
+    {
+        warn!(
+            "token count {} exceeds model context limit {}",
+            total_token_count, limit
+        );
     }
 
     Ok(())

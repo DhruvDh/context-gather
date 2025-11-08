@@ -1,8 +1,9 @@
-use std::{panic, path::PathBuf};
+use std::io::{self, IsTerminal};
 use std::sync::Arc;
+use std::{panic, path::PathBuf};
 
 use crate::ui::{tui_events, tui_render, tui_state};
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event},
     execute,
@@ -28,9 +29,9 @@ impl Drop for HookGuard {
 /// Clean up terminal state: disable raw mode, exit alternate screen, disable mouse capture, and show cursor.
 fn cleanup_terminal<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
     disable_raw_mode()?;
-    // Restore terminal screen and disable mouse capture using stdout
-    let mut stdout = std::io::stdout();
-    execute!(stdout, LeaveAlternateScreen, DisableMouseCapture)?;
+    // Restore terminal screen and disable mouse capture using stderr (stdout might be piped)
+    let mut stderr = io::stderr();
+    execute!(stderr, LeaveAlternateScreen, DisableMouseCapture)?;
     terminal.show_cursor()?;
     Ok(())
 }
@@ -39,15 +40,25 @@ pub fn select_files_tui(
     paths: Vec<PathBuf>,
     preselected: &[PathBuf],
 ) -> Result<Vec<PathBuf>> {
+    // Ensure we have a TTY to render against; stderr stays attached when stdout is piped.
+    if !io::stderr().is_terminal() {
+        return Err(anyhow!(
+            "interactive mode requires an attached terminal (stderr is not a TTY)"
+        ));
+    }
+
     // Install panic hook to restore terminal on panic
     let default_hook = panic::take_hook();
-    let default_hook: Arc<dyn Fn(&panic::PanicHookInfo<'_>) + Send + Sync + 'static> = default_hook.into();
-    let _guard = HookGuard { original: default_hook.clone() };
+    let default_hook: Arc<dyn Fn(&panic::PanicHookInfo<'_>) + Send + Sync + 'static> =
+        default_hook.into();
+    let _guard = HookGuard {
+        original: default_hook.clone(),
+    };
     panic::set_hook(Box::new({
         let dh = default_hook.clone();
         move |info| {
             let _ = disable_raw_mode();
-            let _ = execute!(std::io::stdout(), LeaveAlternateScreen, DisableMouseCapture);
+            let _ = execute!(io::stderr(), LeaveAlternateScreen, DisableMouseCapture);
             (dh)(info);
         }
     }));
@@ -62,9 +73,9 @@ pub fn select_files_tui(
 
     // Setup terminal
     enable_raw_mode()?;
-    let mut stdout = std::io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
-    let backend = CrosstermBackend::new(std::io::stdout());
+    let mut stderr = io::stderr();
+    execute!(stderr, EnterAlternateScreen, EnableMouseCapture)?;
+    let backend = CrosstermBackend::new(io::stderr());
     let mut terminal = Terminal::new(backend)?;
 
     // Event loop

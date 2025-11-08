@@ -138,7 +138,7 @@ mod tests {
         let fp = dir.join("ctx_gather_test");
         let s = "é 中文 ";
         fs::write(&fp, s)?;
-        let files = collect_file_data(&[fp.clone()], u64::MAX)?;
+        let files = collect_file_data(std::slice::from_ref(&fp), u64::MAX)?;
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].contents, s);
         let _ = fs::remove_file(&fp);

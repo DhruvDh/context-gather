@@ -1,7 +1,6 @@
-use assert_cmd::Command;
 use assert_fs::prelude::*;
-use predicates::str::contains;
 use predicates::prelude::*;
+use predicates::str::contains;
 
 #[test]
 fn chunk_size_splits_and_summarizes() {
@@ -12,8 +11,7 @@ fn chunk_size_splits_and_summarizes() {
             .unwrap();
     }
 
-    Command::cargo_bin("context-gather")
-        .unwrap()
+    assert_cmd::cargo::cargo_bin_cmd!("context-gather")
         .current_dir(&dir)
         .args(["--stdout", "--no-clipboard", "-c", "50", "."])
         .assert()
@@ -28,8 +26,7 @@ fn chunk_size_splits_and_summarizes() {
 fn zero_files_outputs_header_with_closing_tag() {
     let dir = assert_fs::TempDir::new().unwrap();
 
-    Command::cargo_bin("context-gather")
-        .unwrap()
+    assert_cmd::cargo::cargo_bin_cmd!("context-gather")
         .current_dir(&dir)
         .args(["--stdout", "--no-clipboard", "-c", "50", "."])
         .assert()

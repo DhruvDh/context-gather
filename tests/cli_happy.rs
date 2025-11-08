@@ -1,4 +1,3 @@
-use assert_cmd::Command;
 use assert_fs::prelude::*;
 use predicates::str::contains;
 
@@ -7,8 +6,7 @@ fn stdout_only_basic() {
     let dir = assert_fs::TempDir::new().unwrap();
     dir.child("foo.txt").write_str("hello world").unwrap();
 
-    Command::cargo_bin("context-gather")
-        .unwrap()
+    assert_cmd::cargo::cargo_bin_cmd!("context-gather")
         .current_dir(&dir)
         .args(["--stdout", "--no-clipboard", "foo.txt"])
         .assert()
@@ -26,8 +24,7 @@ fn chunk_size_splits_and_summarises() {
             .unwrap();
     }
 
-    Command::cargo_bin("context-gather")
-        .unwrap()
+    assert_cmd::cargo::cargo_bin_cmd!("context-gather")
         .current_dir(&dir)
         .args(["--stdout", "--no-clipboard", "-c", "50", "."])
         .assert()
