@@ -141,7 +141,7 @@ fn main() -> Result<()> {
     let xml_output = xml_output::build_xml(&file_data);
 
     // 5. Copy to clipboard
-    clipboard::copy_to_clipboard(&xml_output)?;
+    clipboard::copy_to_clipboard(&xml_output, false, false)?;
 
     // 6. Count tokens and print them
     gather::count_tokens(&xml_output)?;
@@ -368,22 +368,22 @@ Using [`cli-clipboard`](https://crates.io/crates/cli-clipboard) for Wayland-safe
 use anyhow::{Result, anyhow};
 use cli_clipboard::{ClipboardContext, ClipboardProvider};
 
-pub fn copy_to_clipboard(text: &str) -> Result<()> {
+/// `fallback_stdout` lets the caller decide whether to emit the text when clipboard access fails.
+pub fn copy_to_clipboard(text: &str, fail_hard: bool, fallback_stdout: bool) -> Result<()> {
     let mut ctx = ClipboardContext::new().map_err(|e| anyhow!("init clipboard: {e}"))?;
-    ctx.set_contents(text.to_owned())
-        .map_err(|e| anyhow!("set clipboard contents: {e}"))?;
-    Ok(())
-}
-```
-
-If you want a resilient fallback for headless environments, wrap the call so failures
-fall back to stdout instead of aborting:
-
-```rust
-pub fn copy_or_stdout(text: &str) -> Result<()> {
-    if let Err(err) = copy_to_clipboard(text) {
-        eprintln!("clipboard unavailable ({err}); writing to stdout instead");
-        print!("{text}");
+    if let Err(err) = ctx
+        .set_contents(text.to_owned())
+        .map_err(|e| anyhow!("set clipboard contents: {e}"))
+    {
+        if fail_hard {
+            return Err(err);
+        }
+        if fallback_stdout {
+            eprintln!("clipboard unavailable ({err}); writing to stdout instead");
+            print!("{text}");
+        } else {
+            eprintln!("clipboard unavailable: {err}");
+        }
     }
     Ok(())
 }

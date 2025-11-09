@@ -169,7 +169,7 @@ fn main() -> Result<()> {
         }
         // Copy to clipboard
         if !config.no_clipboard {
-            clipboard::copy_to_clipboard(&xml_output, false)?;
+            clipboard::copy_to_clipboard(&xml_output, false, !config.stdout)?;
         }
         // Summary: one chunk (index 0)
         let summary = if config.stdout && config.no_clipboard && config.model_context.is_none() {
@@ -237,7 +237,7 @@ fn main() -> Result<()> {
             print!("{snippet}");
         }
         if copy_idx == i as isize && !config.no_clipboard {
-            clipboard::copy_to_clipboard(&snippet, false)?;
+            clipboard::copy_to_clipboard(&snippet, false, !config.stdout)?;
         }
     }
     // 8) Summary

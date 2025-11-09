@@ -23,7 +23,7 @@ pub fn multi_step_mode(
     // Always output the header snippet
     print!("{}", snippet);
     if !config.no_clipboard {
-        clipboard::copy_to_clipboard(&snippet, false)?;
+        clipboard::copy_to_clipboard(&snippet, false, false)?;
     }
     // Display REPL instructions
     eprintln!("Commands: enter file ids, file paths, or glob patterns; type 'q' to quit.");
@@ -84,7 +84,7 @@ pub fn multi_step_mode(
                 print!("{}", out);
             }
             if !config.no_clipboard {
-                clipboard::copy_to_clipboard(&out, false)?;
+                clipboard::copy_to_clipboard(&out, false, !config.stdout)?;
                 eprintln!("Copied file id {}", id);
             }
         }
@@ -127,7 +127,7 @@ pub fn streaming_mode(
             print!("{}", snippet);
         }
         if !config.no_clipboard {
-            clipboard::copy_to_clipboard(&snippet, false)?;
+            clipboard::copy_to_clipboard(&snippet, false, !config.stdout)?;
             eprintln!("Copied chunk {idx}");
         }
         {
