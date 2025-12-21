@@ -1,6 +1,6 @@
 use fuzzy_matcher::{FuzzyMatcher, skim::SkimMatcherV2};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Shared UI state for file selection TUI
 pub struct UiState {
@@ -29,13 +29,34 @@ impl UiState {
         paths: Vec<PathBuf>,
         preselected: &[PathBuf],
     ) -> Self {
+        let cwd = std::env::current_dir()
+            .ok()
+            .and_then(|p| dunce::canonicalize(p).ok());
+
+        fn display_path(
+            path: &Path,
+            cwd: Option<&Path>,
+        ) -> String {
+            if let Some(cwd) = cwd
+                && let Ok(stripped) = path.strip_prefix(cwd)
+            {
+                if stripped.as_os_str().is_empty() {
+                    return ".".to_string();
+                }
+                return stripped.to_string_lossy().to_string();
+            }
+            path.display().to_string()
+        }
+
         // Build items with initial checked state
         let items: Vec<(PathBuf, bool)> = paths
             .into_iter()
             .map(|p| (p.clone(), preselected.contains(&p)))
             .collect();
-        let item_display: Vec<String> =
-            items.iter().map(|(p, _)| p.display().to_string()).collect();
+        let item_display: Vec<String> = items
+            .iter()
+            .map(|(p, _)| display_path(p, cwd.as_deref()))
+            .collect();
 
         // Count extensions
         let mut ext_counts = HashMap::new();
