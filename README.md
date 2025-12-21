@@ -64,6 +64,8 @@ chrono = "0.4.41"
 cli-clipboard = "0.4.0"
 ```
 
+Adding tiktoken-rs v0.7.0 (available: v0.9.1).
+
 (Adjust versions to the latest semver releases as needed.)
 
 ## 3. Context Header Format
@@ -399,7 +401,7 @@ Putting it all together, your CLI will:
 4. **Collect file contents**; for each file that isn't valid text, log a warning.  
 5. **Generate an XML-like string**, grouping by folder.  
 6. **Copy** that string to the clipboard.  
-7. **Count tokens** using `tiktoken_rs`.  
+7. **Count tokens** using `tiktoken_rs` (GPT-5.2 encoding).  
 8. **Print** the token count.  
 
 By default (without `--interactive`), it just does steps 1, 2, 4–8 and finishes immediately.

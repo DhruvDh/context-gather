@@ -77,10 +77,10 @@ fn part_counts_match_output() {
     for segment in joined.split("part=\"").skip(1) {
         if let Some(raw) = segment.split('"').next() {
             let mut iter = raw.split('/');
-            if let (Some(idx), Some(total)) = (iter.next(), iter.next()) {
-                if let (Ok(idx), Ok(total)) = (idx.parse::<usize>(), total.parse::<usize>()) {
-                    parts.push((idx, total));
-                }
+            if let (Some(idx), Some(total)) = (iter.next(), iter.next())
+                && let (Ok(idx), Ok(total)) = (idx.parse::<usize>(), total.parse::<usize>())
+            {
+                parts.push((idx, total));
             }
         }
     }
