@@ -4,6 +4,7 @@ use context_gather::config::Config;
 use context_gather::gather;
 use context_gather::header;
 use context_gather::io::clipboard;
+use context_gather::output;
 use context_gather::ui::select_files_tui;
 use context_gather::ui::stream::{multi_step_mode, streaming_mode};
 use context_gather::xml_output;
@@ -25,10 +26,15 @@ fn main() -> Result<()> {
     let config = Config::from_cli()?;
 
     // Pre-validate CLI arg combos: chunk-index requires chunk-size > 0
-    if config.chunk_size == 0 && config.chunk_index >= 0 {
+    if matches!(config.chunk_size, Some(0)) {
+        error!("--chunk-size must be > 0 (omit it to disable chunking)");
+        std::process::exit(2);
+    }
+    if config.chunk_size.is_none() && config.chunk_index >= 0 {
         error!("--chunk-index requires --chunk-size > 0");
         std::process::exit(3);
     }
+    let chunk_limit = config.chunk_size.unwrap_or(0);
 
     // 1) Expand user-specified paths (globs, etc.)
     let user_paths_raw = gather::expand_paths(config.paths.clone())?;
@@ -39,23 +45,7 @@ fn main() -> Result<()> {
         candidate: &std::path::Path,
         user_paths: &[PathBuf],
     ) -> bool {
-        // Attempt to canonicalize the candidate; skip if it fails
-        let cand_canon = match dunce::canonicalize(candidate) {
-            Ok(c) => c,
-            Err(_) => return false,
-        };
-
-        // If any user path is a parent of `cand_canon` or exact match => true
-        for up in user_paths {
-            // Canonicalize user path
-            if let Ok(up_canon) = dunce::canonicalize(up) {
-                // starts_with() means `cand_canon` is inside or equal to `up_canon`
-                if cand_canon.starts_with(&up_canon) {
-                    return true;
-                }
-            }
-        }
-        false
+        user_paths.iter().any(|up| candidate.starts_with(up))
     }
 
     // 2) Build candidate file list: include explicit files and files under
@@ -82,11 +72,14 @@ fn main() -> Result<()> {
     candidate_files.sort();
     candidate_files.dedup();
 
-    // 3) Among those gathered, preselect anything "under" or exactly matching user
-    //    paths
+    // 3) Among those gathered, preselect anything "under" or exactly matching user paths
+    let user_paths_canon: Vec<PathBuf> = user_paths_raw
+        .iter()
+        .filter_map(|p| dunce::canonicalize(p).ok())
+        .collect();
     let preselected_paths: Vec<PathBuf> = candidate_files
         .iter()
-        .filter(|cand| is_preselected(cand, &user_paths_raw))
+        .filter(|cand| is_preselected(cand, &user_paths_canon))
         .cloned()
         .collect();
 
@@ -125,16 +118,23 @@ fn main() -> Result<()> {
 
     // 6) Read file data and build XML
     let file_data = gather::collect_file_data(&candidate_files, config.max_size)?;
-    let xml_output = xml_output::build_xml(&file_data)?;
+    let xml_output = xml_output::build_xml_with_escape(&file_data, config.escape_xml)?;
 
     // Build smart chunks and metadata (header plus file parts), needed for multi-step and chunked modes
-    let (mut data_chunks, metas) = chunker::build_chunks(&file_data, config.chunk_size);
+    let (mut data_chunks, metas) =
+        chunker::build_chunks(&file_data, chunk_limit, config.escape_xml);
     use context_gather::gather::count_tokens;
     let total_chunks = data_chunks.len() + 1; // +1 for header
     // Create header XML: opens <shared-context> and includes file-map header
     let header_xml = format!(
         "<shared-context>\n{}\n",
-        header::make_header(total_chunks, config.chunk_size, &metas, config.multi_step)
+        header::make_header(
+            total_chunks,
+            chunk_limit,
+            &metas,
+            config.multi_step,
+            config.escape_xml,
+        )
     );
     let header_chunk = chunker::Chunk {
         index: 0,
@@ -156,13 +156,13 @@ fn main() -> Result<()> {
     }
 
     // Chunked mode interactive REPL: only when interactive flag is set
-    if config.chunk_size > 0 && config.interactive {
+    if chunk_limit > 0 && config.interactive {
         streaming_mode(&chunks, &config)?;
         return Ok(());
     }
 
     // If chunking disabled (-c 0), output full XML as a single chunk
-    if config.chunk_size == 0 {
+    if chunk_limit == 0 {
         // Print XML on stdout if requested
         if config.stdout {
             println!("{xml_output}");
@@ -198,10 +198,6 @@ fn main() -> Result<()> {
         copy_idx = 0;
     }
     // Non-interactive: handle selected chunk or print all
-    if config.chunk_index >= 0 && config.chunk_size == 0 {
-        error!("`--chunk-index` requires `--chunk-size`");
-        std::process::exit(2);
-    }
     if copy_idx >= chunks.len() as isize {
         warn!(
             "--chunk-index {} out of range (0..{})",
@@ -212,27 +208,8 @@ fn main() -> Result<()> {
     }
     // Non-interactive: for each chunk, print and/or copy full XML snippet
     let total_chunks = chunks.len();
-    for (i, chunk) in chunks.iter().enumerate() {
-        let rem = total_chunks - i - 1;
-        let snippet = if i == 0 {
-            let mut s = chunk.xml.clone();
-            if rem > 0 {
-                s.push_str(&format!("<more remaining=\"{rem}\"/>\n"));
-            } else {
-                s.push_str("</shared-context>\n");
-            }
-            s
-        } else if rem > 0 {
-            format!(
-                "<context-chunk id=\"{}/{}\">\n{}</context-chunk>\n<more remaining=\"{}\"/>\n",
-                i, total_chunks, chunk.xml, rem
-            )
-        } else {
-            format!(
-                "<context-chunk id=\"{}/{}\">\n{}</context-chunk>\n</shared-context>\n",
-                i, total_chunks, chunk.xml
-            )
-        };
+    for i in 0..total_chunks {
+        let snippet = output::format_chunk_snippet(&chunks, i);
         if config.stdout {
             print!("{snippet}");
         }

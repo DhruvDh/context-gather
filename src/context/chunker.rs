@@ -1,10 +1,10 @@
 // Smart chunk builder: structure-aware, token-bounded
 use crate::context::types::FileContents;
+use crate::context::xml::{maybe_escape_attr, maybe_escape_text};
 use crate::tokenizer::count as count_tokens;
 use std::path::{Path, PathBuf};
 
 /// Metadata for each file in the context header
-#[allow(dead_code)]
 pub struct FileMeta {
     pub id: usize,
     pub path: PathBuf,
@@ -13,11 +13,40 @@ pub struct FileMeta {
 }
 
 /// Represents one chunk of XML-ish output
-#[allow(dead_code)]
 pub struct Chunk {
     pub index: usize,
     pub xml: String,
     pub tokens: usize,
+}
+
+fn split_oversize_parts(
+    lines: &[&str],
+    path: &Path,
+    total_parts: usize,
+    max_tokens: usize,
+    escape_xml: bool,
+) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut part_xml = String::new();
+    let mut part_tok = 0usize;
+    let mut part_idx = 1usize;
+    let mut overhead = count_tokens(&wrap_part(path, part_idx, total_parts, "", escape_xml));
+    for line in lines {
+        let new_tok = count_tokens(line) + 1; // include newline
+        if !part_xml.is_empty() && part_tok + new_tok + overhead > max_tokens {
+            parts.push(std::mem::take(&mut part_xml));
+            part_tok = 0;
+            part_idx += 1;
+            overhead = count_tokens(&wrap_part(path, part_idx, total_parts, "", escape_xml));
+        }
+        part_xml.push_str(line);
+        part_xml.push('\n');
+        part_tok += new_tok;
+    }
+    if !part_xml.is_empty() {
+        parts.push(part_xml);
+    }
+    parts
 }
 
 /// Builds smart chunks and metadata for header
@@ -25,20 +54,25 @@ pub struct Chunk {
 pub fn build_chunks(
     files: &[FileContents],
     max_tokens: usize,
+    escape_xml: bool,
 ) -> (Vec<Chunk>, Vec<FileMeta>) {
     // If max_tokens is zero, do not split: generate one chunk with all files
     if max_tokens == 0 {
         let mut metas = Vec::new();
         let mut xml_all = String::new();
         for (file_id, file) in files.iter().enumerate() {
+            let contents = maybe_escape_text(&file.contents, escape_xml);
+            let path = file.path.display().to_string();
+            let path_attr = maybe_escape_attr(&path, escape_xml);
+            let name = file
+                .path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
+            let name_attr = maybe_escape_attr(&name, escape_xml);
             let file_block = format!(
                 "    <file-contents path=\"{}\" name=\"{}\">\n{}\n    </file-contents>\n",
-                file.path.display(),
-                file.path
-                    .file_name()
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_default(),
-                file.contents,
+                path_attr, name_attr, contents,
             );
             let file_tok = count_tokens(&file_block);
             xml_all.push_str(&file_block);
@@ -61,12 +95,12 @@ pub fn build_chunks(
     let mut metas = Vec::<FileMeta>::new();
     let mut current_xml = String::new();
     let mut current_toks = 0usize;
-    let mut chunk_idx = 0usize;
     let mut file_id = 0usize;
 
     // Helper to push a chunk if non-empty, resetting xml and toks
-    let mut push_chunk = |xml: &mut String, toks: &mut usize, idx: usize| {
+    let mut push_chunk = |xml: &mut String, toks: &mut usize| {
         if !xml.is_empty() {
+            let idx = chunks.len();
             chunks.push(Chunk {
                 index: idx,
                 xml: std::mem::take(xml),
@@ -77,14 +111,19 @@ pub fn build_chunks(
     };
 
     for file in files {
+        let contents = maybe_escape_text(&file.contents, escape_xml);
+        let contents_str = contents.as_ref();
+        let path = file.path.display().to_string();
+        let path_attr = maybe_escape_attr(&path, escape_xml);
+        let name = file
+            .path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let name_attr = maybe_escape_attr(&name, escape_xml);
         let file_block = format!(
             "    <file-contents path=\"{}\" name=\"{}\">\n{}\n    </file-contents>\n",
-            file.path.display(),
-            file.path
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_default(),
-            file.contents,
+            path_attr, name_attr, contents_str,
         );
         let file_tok = count_tokens(&file_block);
 
@@ -104,8 +143,7 @@ pub fn build_chunks(
 
         // start new chunk if file alone fits
         if file_tok <= max_tokens {
-            push_chunk(&mut current_xml, &mut current_toks, chunk_idx);
-            chunk_idx += 1;
+            push_chunk(&mut current_xml, &mut current_toks);
             current_xml.push_str(&file_block);
             current_toks = file_tok;
             metas.push(FileMeta {
@@ -119,61 +157,38 @@ pub fn build_chunks(
         }
 
         // oversize file: split into parts by lines
-        let mut part_xml = String::new();
-        let mut part_tok = 0usize; // body token count
-        let mut part_idx = 1usize;
-        let mut total_file_tokens = 0usize;
-        // Calculate number of parts with integer division (ceil)
-        let mut max_parts = (file_tok as u128).div_ceil(max_tokens as u128) as usize;
-        if max_parts == 0 {
-            max_parts = 1;
-        }
-        let mut overhead = count_tokens(&wrap_part(&file.path, part_idx, max_parts, ""));
-        for line in file.contents.split('\n') {
-            let new_tok = count_tokens(line) + 1; // include newline
-            if part_tok + new_tok + overhead > max_tokens {
-                let wrapped = wrap_part(&file.path, part_idx, max_parts, &part_xml);
-                push_chunk(&mut current_xml, &mut current_toks, chunk_idx);
-                let wrapped_tok = count_tokens(&wrapped);
-                current_xml.push_str(&wrapped);
-                current_toks = wrapped_tok;
-                total_file_tokens += wrapped_tok;
-                chunk_idx += 1;
-                part_xml.clear();
-                part_tok = 0;
-                part_idx += 1;
-                overhead = count_tokens(&wrap_part(&file.path, part_idx, max_parts, ""));
+        let lines: Vec<&str> = contents_str.split('\n').collect();
+        let mut parts_target = 1usize;
+        let parts = loop {
+            let parts =
+                split_oversize_parts(&lines, &file.path, parts_target, max_tokens, escape_xml);
+            let actual = parts.len().max(1);
+            if actual == parts_target {
+                break parts;
             }
-            part_xml.push_str(line);
-            part_xml.push('\n');
-            part_tok += new_tok;
-        }
-        // flush last sub-part
-        if !part_xml.is_empty() {
-            let wrapped = wrap_part(&file.path, part_idx, max_parts, &part_xml);
-            push_chunk(&mut current_xml, &mut current_toks, chunk_idx);
+            parts_target = actual;
+        };
+        let mut total_file_tokens = 0usize;
+        let parts_count = parts.len().max(1);
+        for (idx, body) in parts.iter().enumerate() {
+            let wrapped = wrap_part(&file.path, idx + 1, parts_count, body, escape_xml);
+            push_chunk(&mut current_xml, &mut current_toks);
             let wrapped_tok = count_tokens(&wrapped);
             current_xml.push_str(&wrapped);
             current_toks = wrapped_tok;
             total_file_tokens += wrapped_tok;
         }
-        // Adjust parts count if an empty sub-part was not emitted
-        let parts = if part_tok == 0 && max_parts > 1 {
-            max_parts - 1
-        } else {
-            max_parts
-        };
         metas.push(FileMeta {
             id: file_id,
             path: file.path.clone(),
             tokens: total_file_tokens,
-            parts,
+            parts: parts_count,
         });
         file_id += 1;
     }
 
     // push final chunk
-    push_chunk(&mut current_xml, &mut current_toks, chunk_idx);
+    push_chunk(&mut current_xml, &mut current_toks);
     (chunks, metas)
 }
 
@@ -183,19 +198,19 @@ fn wrap_part(
     idx: usize,
     total: usize,
     body: &str,
+    escape_xml: bool,
 ) -> String {
     // Safely extract filename, fallback to empty string
     let filename = path
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_default();
+    let path_str = path.display().to_string();
+    let path_attr = maybe_escape_attr(&path_str, escape_xml);
+    let filename_attr = maybe_escape_attr(&filename, escape_xml);
     format!(
         "    <file-contents path=\"{}\" name=\"{}\" part=\"{}/{}\">\n{}    </file-contents>\n",
-        path.display(),
-        filename,
-        idx,
-        total,
-        body
+        path_attr, filename_attr, idx, total, body
     )
 }
 
@@ -215,7 +230,7 @@ mod tests {
             contents: "hello world\n".repeat(10),
         }];
         // Build chunks with generous limit
-        let (chunks, metas) = build_chunks(&files, 1000);
+        let (chunks, metas) = build_chunks(&files, 1000, false);
         // Concatenate all chunk XML
         let xml_all: String = chunks.iter().map(|c| c.xml.clone()).collect();
         let total_tokens = count_tokens(&xml_all);

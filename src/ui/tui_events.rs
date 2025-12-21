@@ -1,6 +1,5 @@
 use crate::ui::tui_state::UiState;
 use crossterm::event::{Event, KeyCode, KeyModifiers};
-use fuzzy_matcher::{FuzzyMatcher, skim::SkimMatcherV2};
 use std::collections::HashSet;
 use std::path::PathBuf;
 
@@ -65,30 +64,20 @@ pub fn handle_event(
                         .for_each(|(_, c)| *c = false);
                     state.extension_search.clear();
                 }
+                state.ensure_filtered_exts();
             } else {
                 // exiting: restore
                 state.search_input = state.saved_search_input.clone();
                 state.extension_mode = false;
+                state.ensure_filtered_files();
             }
             return Some(UiMsg::ToggleExtensionMode);
         }
 
         // If in extension-filter mode
         if state.extension_mode {
-            // build filtered extension indices
-            let filtered_ext: Vec<usize> = if state.extension_search.is_empty() {
-                (0..state.extension_items.len()).collect()
-            } else {
-                let matcher = SkimMatcherV2::default();
-                let mut vec = Vec::new();
-                for (i, (ext, _)) in state.extension_items.iter().enumerate() {
-                    if let Some(score) = matcher.fuzzy_match(ext, &state.extension_search) {
-                        vec.push((i, score));
-                    }
-                }
-                vec.sort_by_key(|&(_, s)| -s);
-                vec.into_iter().map(|(i, _)| i).collect()
-            };
+            state.ensure_filtered_exts();
+            let filtered_ext = &state.filtered_exts;
             match code {
                 KeyCode::Up => state.ext_selected_idx = state.ext_selected_idx.saturating_sub(1),
                 KeyCode::Down => {
@@ -98,6 +87,7 @@ pub fn handle_event(
                 }
                 KeyCode::Backspace => {
                     state.extension_search.pop();
+                    state.ensure_filtered_exts();
                 }
                 // Space toggles the current extension
                 KeyCode::Char(' ') => {
@@ -108,6 +98,7 @@ pub fn handle_event(
                 // Other chars update the extension search
                 KeyCode::Char(c) => {
                     state.extension_search.push(c);
+                    state.ensure_filtered_exts();
                 }
                 KeyCode::Enter => {
                     let chosen_exts: HashSet<String> = state
@@ -123,6 +114,7 @@ pub fn handle_event(
                     apply_extension_items(&chosen_exts, &mut state.items, false, &all_known);
                     state.extension_mode = false;
                     state.search_input = state.saved_search_input.clone();
+                    state.ensure_filtered_files();
                 }
                 _ => {}
             }
@@ -130,20 +122,8 @@ pub fn handle_event(
         }
 
         // build filtered file indices for fuzzy search
-        let filtered_files: Vec<usize> = if state.search_input.is_empty() {
-            (0..state.items.len()).collect()
-        } else {
-            let matcher = SkimMatcherV2::default();
-            let mut vec = Vec::new();
-            for (i, (p, _)) in state.items.iter().enumerate() {
-                if let Some(score) = matcher.fuzzy_match(&p.to_string_lossy(), &state.search_input)
-                {
-                    vec.push((i, score));
-                }
-            }
-            vec.sort_by_key(|&(_, s)| -s);
-            vec.into_iter().map(|(i, _)| i).collect()
-        };
+        state.ensure_filtered_files();
+        let filtered_files = &state.filtered_files;
 
         // Ctrl-based bulk commands on filtered files
         if mods.contains(KeyModifiers::CONTROL) {
@@ -184,11 +164,13 @@ pub fn handle_event(
             match code {
                 KeyCode::Backspace => {
                     state.search_input.pop();
+                    state.ensure_filtered_files();
                     return None;
                 }
                 // push normal chars into search, but skip space and 'q'
                 KeyCode::Char(c) if c != ' ' && c != 'q' => {
                     state.search_input.push(c);
+                    state.ensure_filtered_files();
                     return None;
                 }
                 _ => {}

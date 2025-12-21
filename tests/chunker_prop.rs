@@ -26,7 +26,7 @@ proptest! {
             path: PathBuf::from("big.txt"),
             contents: text.clone(),
         };
-        let (chunks, _) = build_chunks(&[file], limit);
+        let (chunks, _) = build_chunks(&[file], limit, false);
         let glued:String = chunks.into_iter().map(|c| c.xml).collect();
         for l in &lines {
             prop_assert!(glued.contains(l));

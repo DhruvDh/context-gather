@@ -3,6 +3,7 @@ pub mod config;
 pub mod constants;
 pub mod context;
 pub mod io;
+pub mod output;
 pub mod tokenizer;
 pub mod ui;
 

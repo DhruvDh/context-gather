@@ -12,10 +12,11 @@ pub struct Config {
     pub max_size: u64,
     pub exclude: Vec<String>,
     pub model_context: Option<usize>,
-    pub chunk_size: usize,
+    pub chunk_size: Option<usize>,
     pub chunk_index: isize,
     /// Enable multi-step mode: copy only header initially and serve files on demand.
     pub multi_step: bool,
+    pub escape_xml: bool,
 }
 
 impl Config {
@@ -34,6 +35,7 @@ impl Config {
             chunk_size: cli.chunk_size,
             chunk_index: cli.chunk_index,
             multi_step: cli.multi_step,
+            escape_xml: cli.escape_xml,
         })
     }
 }

@@ -1,7 +1,9 @@
 use crate::chunker::Chunk;
 use crate::config::Config;
 use crate::context::types::FileContents;
+use crate::context::xml::{maybe_escape_attr, maybe_escape_text};
 use crate::io::clipboard;
+use crate::output;
 use anyhow::Result;
 use glob::Pattern;
 use path_slash::PathBufExt;
@@ -13,13 +15,8 @@ pub fn multi_step_mode(
     file_data: &[FileContents],
     config: &Config,
 ) -> Result<()> {
-    let total = chunks.len();
-    let rem = total.saturating_sub(1);
     // Header snippet without closing </shared-context>
-    let mut snippet = chunks[0].xml.clone();
-    if rem > 0 {
-        snippet.push_str(&format!("<more remaining=\"{}\"/>\n", rem));
-    }
+    let snippet = output::format_header_snippet(chunks);
     // Always output the header snippet
     print!("{}", snippet);
     if !config.no_clipboard {
@@ -67,18 +64,21 @@ pub fn multi_step_mode(
         // Output each requested file
         for &id in &selected {
             let fc = &file_data[id];
-            let path = fc.path.to_slash_lossy();
+            let path = fc.path.to_slash_lossy().to_string();
             let name = fc
                 .path
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_default();
+            let path_attr = maybe_escape_attr(&path, config.escape_xml);
+            let name_attr = maybe_escape_attr(&name, config.escape_xml);
+            let contents = maybe_escape_text(&fc.contents, config.escape_xml);
             let out = format!(
                 "<file-contents id=\"{id}\" path=\"{path}\" name=\"{name}\">\n{contents}\n</file-contents>\n",
                 id = id,
-                path = path,
-                name = name,
-                contents = fc.contents
+                path = path_attr,
+                name = name_attr,
+                contents = contents
             );
             if config.stdout {
                 print!("{}", out);
@@ -103,26 +103,7 @@ pub fn streaming_mode(
     // Display REPL instructions
     eprintln!("Commands: press Enter for next chunk, number to jump, or 'q' to quit.");
     loop {
-        let rem = total - idx - 1;
-        let snippet = if idx == 0 {
-            let mut s = chunks[0].xml.clone();
-            if rem > 0 {
-                s.push_str(&format!("<more remaining=\"{}\"/>\n", rem));
-            } else {
-                s.push_str("</shared-context>\n");
-            }
-            s
-        } else if rem > 0 {
-            format!(
-                "<context-chunk id=\"{}/{}\">\n{}</context-chunk>\n<more remaining=\"{}\"/>\n",
-                idx, total, chunks[idx].xml, rem
-            )
-        } else {
-            format!(
-                "<context-chunk id=\"{}/{}\">\n{}</context-chunk>\n</shared-context>\n",
-                idx, total, chunks[idx].xml
-            )
-        };
+        let snippet = output::format_chunk_snippet(chunks, idx);
         if config.stdout {
             print!("{}", snippet);
         }

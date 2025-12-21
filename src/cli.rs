@@ -1,4 +1,4 @@
-use crate::constants::{DEFAULT_CHUNK_SIZE, DEFAULT_MAX_FILE_SIZE};
+use crate::constants::DEFAULT_MAX_FILE_SIZE;
 use clap::Parser;
 
 #[derive(Parser, Debug)]
@@ -36,9 +36,9 @@ pub struct Cli {
     #[arg(long = "model-context", default_value = "200000")]
     pub model_context: Option<usize>,
 
-    /// Split the context into chunks no larger than this many tokens (use with -i to browse chunks in TUI).
-    #[arg(short = 'c', long = "chunk-size", default_value_t = DEFAULT_CHUNK_SIZE)]
-    pub chunk_size: usize,
+    /// Split the context into chunks no larger than this many tokens (omit to disable chunking).
+    #[arg(short = 'c', long = "chunk-size")]
+    pub chunk_size: Option<usize>,
 
     /// Which chunk to copy (0-based); -1 means none.
     #[arg(short = 'k', long = "chunk-index", default_value_t = -1)]
@@ -47,4 +47,8 @@ pub struct Cli {
     /// Enable multi-step mode: copy only header initially; then serve files on demand (use -i for TUI file picker).
     #[arg(short = 'm', long = "multi-step")]
     pub multi_step: bool,
+
+    /// Escape XML special characters in content and attributes.
+    #[arg(long = "escape-xml", default_value_t = false)]
+    pub escape_xml: bool,
 }

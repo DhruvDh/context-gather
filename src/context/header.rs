@@ -1,4 +1,5 @@
 use crate::chunker::FileMeta;
+use crate::context::xml::{maybe_escape_attr, maybe_escape_text};
 use chrono::{SecondsFormat, Utc};
 use std::fmt::Write;
 use std::process::Command;
@@ -9,19 +10,19 @@ pub fn make_header(
     limit: usize,
     files: &[FileMeta],
     multi_step: bool,
+    escape_xml: bool,
 ) -> String {
     // Timestamp in RFC3339 with seconds precision
     let ts = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
     // Build file-map entries
     let mut map = String::new();
     for f in files {
+        let path = f.path.display().to_string();
+        let path_attr = maybe_escape_attr(&path, escape_xml);
         let _ = writeln!(
             &mut map,
             "    <file id=\"{}\" path=\"{}\" tokens=\"{}\" parts=\"{}\"/>",
-            f.id,
-            f.path.display(),
-            f.tokens,
-            f.parts
+            f.id, path_attr, f.tokens, f.parts
         );
     }
     // Build instructions section
@@ -39,21 +40,24 @@ pub fn make_header(
         )
     };
     // Gather git info: branch and last 5 commits
-    let (branch_opt, commits) = {
+    let (branch_opt, commits, git_ok) = {
         // Get current branch
-        let branch = Command::new("git")
+        let branch_out = Command::new("git")
             .args(["rev-parse", "--abbrev-ref", "HEAD"])
-            .output()
-            .ok()
-            .and_then(|o| {
-                if o.status.success() {
-                    String::from_utf8(o.stdout)
-                        .ok()
-                        .map(|s| s.trim_end().to_string())
-                } else {
-                    None
-                }
-            });
+            .output();
+        let branch = branch_out.as_ref().ok().and_then(|o| {
+            if o.status.success() {
+                String::from_utf8(o.stdout.clone())
+                    .ok()
+                    .map(|s| s.trim_end().to_string())
+            } else {
+                None
+            }
+        });
+        let git_ok = branch_out
+            .as_ref()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
         // Get last 5 commit messages
         let msgs = Command::new("git")
             .args(["log", "-5", "--pretty=format:%s"])
@@ -69,21 +73,30 @@ pub fn make_header(
             .unwrap_or_default();
         // Collect last 5 commit messages into a Vec<String>
         let commits: Vec<String> = msgs.lines().map(|l| l.to_string()).collect();
-        (branch, commits)
+        (branch, commits, git_ok)
     };
     // Build git-info XML
     let mut git_info = String::new();
     if let Some(branch) = branch_opt {
-        let _ = writeln!(&mut git_info, "  <git-info branch=\"{}\">", branch);
+        let branch_attr = maybe_escape_attr(&branch, escape_xml);
+        let _ = writeln!(&mut git_info, "  <git-info branch=\"{}\">", branch_attr);
         for msg in commits {
-            let _ = writeln!(&mut git_info, "    <commit>{}</commit>", msg);
+            let msg_text = maybe_escape_text(&msg, escape_xml);
+            let _ = writeln!(&mut git_info, "    <commit>{}</commit>", msg_text);
         }
         let _ = writeln!(&mut git_info, "  </git-info>");
+    } else if !git_ok {
+        let _ = writeln!(&mut git_info, "  <!-- git info unavailable -->");
     }
     // Gather changed files relative to origin/main
-    let diff_output = Command::new("git")
+    let diff_out = Command::new("git")
         .args(["diff", "--name-only", "origin/main"])
-        .output()
+        .output();
+    let diff_ok = diff_out
+        .as_ref()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+    let diff_output = diff_out
         .ok()
         .and_then(|o| {
             if o.status.success() {
@@ -101,9 +114,12 @@ pub fn make_header(
             "  <changed-files diffed-against=\"origin/main\">"
         );
         for file in &changed {
-            let _ = writeln!(&mut diff_xml, "    <file>{}</file>", file);
+            let file_text = maybe_escape_text(file, escape_xml);
+            let _ = writeln!(&mut diff_xml, "    <file>{}</file>", file_text);
         }
         let _ = writeln!(&mut diff_xml, "  </changed-files>");
+    } else if !diff_ok {
+        let _ = writeln!(&mut diff_xml, "  <!-- git diff unavailable -->");
     }
     // Compose full header with closing tag
     format!(

@@ -358,7 +358,7 @@ fn escape_special_chars(s: &str) -> String {
 }
 ```
 
-Note that escaping may be helpful if you want to ensure valid XML. You can skip it if it's purely for an LLM "context" use case and you're confident the LLM can handle angle brackets.
+Note that escaping may be helpful if you want to ensure valid XML. You can skip it if it's purely for an LLM "context" use case and you're confident the LLM can handle angle brackets. Use `--escape-xml` to enable escaping.
 
 ## 8. Clipboard Integration (in `clipboard.rs`)
 

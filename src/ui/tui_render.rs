@@ -1,5 +1,4 @@
 use crate::ui::tui_state::{UiState, adjust_scroll_and_slice};
-use fuzzy_matcher::{FuzzyMatcher, skim::SkimMatcherV2};
 use tui::{
     Frame,
     backend::Backend,
@@ -43,30 +42,10 @@ pub fn render<B: Backend>(
 
     let area = chunks[1];
     let max_lines = area.height.saturating_sub(2) as usize;
-    let matcher = SkimMatcherV2::default();
 
     if state.extension_mode {
-        // Build, score, and sort extension entries
-        let mut entries: Vec<(usize, i64, String, bool)> = state
-            .extension_items
-            .iter()
-            .enumerate()
-            .filter_map(|(idx, (ext, checked))| {
-                if state.extension_search.is_empty() {
-                    Some((idx, 0, ext.clone(), *checked))
-                } else {
-                    matcher
-                        .fuzzy_match(ext, &state.extension_search)
-                        .map(|score| (idx, score, ext.clone(), *checked))
-                }
-            })
-            .collect();
-        entries.sort_unstable_by_key(|&(_, score, _, _)| std::cmp::Reverse(score));
-
-        let list: Vec<(usize, String, bool)> = entries
-            .into_iter()
-            .map(|(idx, _, text, checked)| (idx, text, checked))
-            .collect();
+        state.ensure_filtered_exts();
+        let list = &state.filtered_exts;
 
         // Adjust scroll and get visible window
         let (offset, end) = adjust_scroll_and_slice(
@@ -80,7 +59,8 @@ pub fn render<B: Backend>(
         // Build ListItems
         let items: Vec<ListItem> = window
             .iter()
-            .map(|(_, text, checked)| {
+            .map(|&idx| {
+                let (text, checked) = &state.extension_items[idx];
                 let mark = if *checked { "[x]" } else { "[ ]" };
                 let spans = Spans::from(vec![
                     Span::styled(mark, Style::default().fg(Color::Yellow)),
@@ -99,28 +79,8 @@ pub fn render<B: Backend>(
             .highlight_style(Style::default().bg(Color::Blue));
         frame.render_stateful_widget(widget, area, &mut list_state);
     } else {
-        // Build, score, and sort file entries
-        let mut entries: Vec<(usize, i64, String, bool)> = state
-            .items
-            .iter()
-            .enumerate()
-            .filter_map(|(idx, (path, checked))| {
-                let text = path.display().to_string();
-                if state.search_input.is_empty() {
-                    Some((idx, 0, text, *checked))
-                } else {
-                    matcher
-                        .fuzzy_match(&text, &state.search_input)
-                        .map(|score| (idx, score, text, *checked))
-                }
-            })
-            .collect();
-        entries.sort_unstable_by_key(|&(_, score, _, _)| std::cmp::Reverse(score));
-
-        let list: Vec<(usize, String, bool)> = entries
-            .into_iter()
-            .map(|(idx, _, text, checked)| (idx, text, checked))
-            .collect();
+        state.ensure_filtered_files();
+        let list = &state.filtered_files;
 
         // Adjust scroll and get visible window
         let (offset, end) = adjust_scroll_and_slice(
@@ -134,8 +94,10 @@ pub fn render<B: Backend>(
         // Build ListItems
         let items: Vec<ListItem> = window
             .iter()
-            .map(|(_, text, checked)| {
-                let mark = if *checked { "[x]" } else { "[ ]" };
+            .map(|&idx| {
+                let text = &state.item_display[idx];
+                let checked = state.items[idx].1;
+                let mark = if checked { "[x]" } else { "[ ]" };
                 let spans = Spans::from(vec![
                     Span::styled(mark, Style::default().fg(Color::Yellow)),
                     Span::raw(" "),
