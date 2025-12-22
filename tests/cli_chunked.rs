@@ -26,10 +26,10 @@ fn chunk_size_splits_and_summarizes() {
     let stdout = String::from_utf8_lossy(&output);
     let mut snippets = Vec::new();
     let mut iter = stdout.split("<context-chunk id=\"");
-    if let Some(header) = iter.next() {
-        if !header.is_empty() {
-            snippets.push(header.to_string());
-        }
+    if let Some(header) = iter.next()
+        && !header.is_empty()
+    {
+        snippets.push(header.to_string());
     }
     for part in iter {
         snippets.push(format!("<context-chunk id=\"{}", part));
