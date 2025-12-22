@@ -2,10 +2,10 @@
 
 # `context-gather` is a Rust CLI tool for gathering file contexts across folders, grouping them into XML-like output, copying to clipboard, and token counting
 
-Install with Rust 1.85 stable (Edition 2024):
+Install with Rust nightly (Edition 2024):
 
 ```bash
-rustup default 1.85.0
+rustup default nightly
 cargo install context-gather
 ```
 
@@ -54,17 +54,16 @@ anyhow = "1.0.95"
 clap = { version = "4.4.6", features = ["derive"] }
 crossterm = "0.29.0"
 glob = "0.3.2"
-tiktoken-rs = "0.7.0"
-tui = "0.19.0"
+globset = "0.4.16"
+tiktoken-rs = "0.9.1"
+ratatui = "0.29.0"
 path-slash = "0.2.1"
-once_cell = "1.17.2"
 dunce = "1.0.5"
-quick-xml = "0.37.5"
 chrono = "0.4.41"
 cli-clipboard = "0.4.0"
 ```
 
-Adding tiktoken-rs v0.7.0 (available: v0.9.1).
+Using tiktoken-rs v0.9.1.
 
 (Adjust versions to the latest semver releases as needed.)
 
@@ -73,10 +72,10 @@ Adding tiktoken-rs v0.7.0 (available: v0.9.1).
 When using `--chunk-size`, the first payload contains a machine-readable header:
 
 ```xml
-<context-header version="1"
-                total-chunks="N"
-                chunk-size="40000"
-                generated-at="2025-05-03T15:04:22Z">
+<shared-context-header version="1"
+                       total-chunks="N"
+                       chunk-size="40000"
+                       generated-at="2025-05-03T15:04:22Z">
   <file-map total-files="F">
     <file id="0" path="src/main.rs" tokens="1874" parts="1"/>
     <file id="1" path="src/lib.rs"  tokens="920"  parts="2"/>
@@ -88,8 +87,10 @@ When using `--chunk-size`, the first payload contains a machine-readable header:
     Reassemble files by <file-map> order and parts.
     Respond "READY" after the final chunk.
   </instructions>
-</context-header>
+</shared-context-header>
 ```
+
+Git metadata (branch, recent commits, diff) is included only when you pass `--git-info`.
 
 ## 3. Parsing Command-Line Arguments (in `cli.rs`)
 
@@ -206,7 +207,7 @@ pub fn select_files_tui(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
 }
 ```
 
-Of course, you would implement the actual TUI rendering loop (with `tui::Terminal`, etc.), but the above shows how it might fit into the overall flow.
+Of course, you would implement the actual TUI rendering loop (with `ratatui::Terminal`, etc.), but the above shows how it might fit into the overall flow.
 
 ## 6. Gathering and Grouping File Contents
 
@@ -360,7 +361,7 @@ fn escape_special_chars(s: &str) -> String {
 }
 ```
 
-Note that escaping may be helpful if you want to ensure valid XML. You can skip it if it's purely for an LLM "context" use case and you're confident the LLM can handle angle brackets. Use `--escape-xml` to enable escaping.
+Note that escaping may be helpful if you want to ensure valid XML. You can skip it if it's purely for an LLM "context" use case and you're confident the LLM can handle angle brackets. Use `--escape-xml` to enable content escaping (attributes are always escaped when needed).
 
 ## 8. Clipboard Integration (in `clipboard.rs`)
 
@@ -401,12 +402,16 @@ Putting it all together, your CLI will:
 4. **Collect file contents**; for each file that isn't valid text, log a warning.  
 5. **Generate an XML-like string**, grouping by folder.  
 6. **Copy** that string to the clipboard.  
-7. **Count tokens** using `tiktoken_rs` (GPT-5.2 encoding).  
+7. **Count tokens** using `tiktoken_rs` (default GPT-5.2 encoding; override with `--tokenizer-model` or `CG_TOKENIZER_MODEL`).  
 8. **Print** the token count.  
 
 By default (without `--interactive`), it just does steps 1, 2, 4–8 and finishes immediately.
 
 ## Usage Examples
+
+Note: when `--stdout` is set, XML is written to stdout and human-readable summaries/warnings go to stderr.
+
+Exclude patterns and multi-step globs are matched against paths relative to the current working directory. Use `**` to match across directories (e.g., `**/*.rs`).
 
 # Interactive chunk streaming with prompt (cycles through chunks and copies to clipboard)
 
@@ -424,12 +429,25 @@ context-gather . -c 39000 -k 2
 context-gather . -c 39000 -k 2 -n -o
 ```
 
+# Multi-step mode (cannot be combined with --chunk-size)
+
+```bash
+context-gather -m .
+```
+
+# Override tokenizer model
+
+```bash
+context-gather . --tokenizer-model gpt-5.2
+CG_TOKENIZER_MODEL=gpt-5.2 context-gather .
+```
+
 ## How Chunk Streaming Works
 
 When using `--chunk-size` (`-c`), `context-gather` splits the XML context into LLM-friendly chunks:
 
 1. **Smart splitting**: every `<file-contents>` block stays intact; oversize files are split by lines with `part="p/N"` markers.
-2. **Machine-readable header**: The first chunk begins with a `<context-header>` carrying:
+2. **Machine-readable header**: The first chunk begins with a `<shared-context-header>` carrying:
    - `version`: format version
    - `total-chunks`: number of chunks including header
    - `chunk-size`: requested token ceiling

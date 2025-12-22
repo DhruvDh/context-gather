@@ -1,5 +1,5 @@
 use assert_fs::prelude::*;
-use predicates::str::{contains, is_empty};
+use predicates::str::contains;
 
 #[test]
 fn dir_and_file_are_deduped() {
@@ -11,6 +11,6 @@ fn dir_and_file_are_deduped() {
         .args(["--stdout", "--no-clipboard", ".", "foo.txt"])
         .assert()
         .success()
-        .stdout(contains("OK 1 files"))
-        .stderr(is_empty());
+        .stdout(contains("<shared-context"))
+        .stderr(contains("OK 1 files"));
 }

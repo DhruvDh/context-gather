@@ -28,8 +28,8 @@ pub fn format_chunk_snippet(
         s
     } else if rem > 0 {
         format!(
-            "<context-chunk id=\"{}/{}\">\n{}</context-chunk>\n<more remaining=\"{}\"/>\n",
-            idx, total, chunks[idx].xml, rem
+            "<context-chunk id=\"{}/{}\">\n{}</context-chunk>\n",
+            idx, total, chunks[idx].xml
         )
     } else {
         format!(

@@ -1,19 +1,19 @@
 use assert_fs::prelude::*;
-use predicates::str::contains;
+use predicates::str::{contains, is_empty};
 
 #[test]
-fn multi_step_without_stdout_prints_header() {
+fn multi_step_without_stdout_is_quiet() {
     let dir = assert_fs::TempDir::new().unwrap();
     dir.child("a.txt").write_str("hello").unwrap();
 
-    // Run with multi-step only, without --stdout: should still print header snippet
+    // Run with multi-step only, without --stdout: should not print header snippet
     let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("context-gather");
     cmd.current_dir(&dir).args(["-m", "."]); // multi-step mode
     // Send 'q' to exit REPL immediately
     cmd.write_stdin("q\n")
         .assert()
         .success()
-        .stdout(contains("<shared-context>"))
+        .stdout(is_empty())
         .stderr(contains("Request file id or glob"));
 }
 

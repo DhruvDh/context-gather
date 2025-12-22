@@ -9,12 +9,13 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use tui::{
+use ratatui::{
     Terminal,
     backend::{Backend, CrosstermBackend},
 };
 
-/// RAII guard that restores the previous panic hook on drop.
+/// RAII guard that restores the previous panic hook on drop so we don't leak
+/// the temporary terminal-cleanup hook into the rest of the process/tests.
 struct HookGuard {
     original: Arc<dyn Fn(&panic::PanicHookInfo<'_>) + Send + Sync + 'static>,
 }
@@ -23,6 +24,27 @@ impl Drop for HookGuard {
     fn drop(&mut self) {
         let orig = Arc::clone(&self.original);
         panic::set_hook(Box::new(move |info| (orig)(info)));
+    }
+}
+
+/// RAII guard that restores terminal state on drop.
+struct TerminalGuard<B: Backend> {
+    terminal: Terminal<B>,
+}
+
+impl<B: Backend> TerminalGuard<B> {
+    fn new(terminal: Terminal<B>) -> Self {
+        Self { terminal }
+    }
+
+    fn terminal_mut(&mut self) -> &mut Terminal<B> {
+        &mut self.terminal
+    }
+}
+
+impl<B: Backend> Drop for TerminalGuard<B> {
+    fn drop(&mut self) {
+        let _ = cleanup_terminal(&mut self.terminal);
     }
 }
 
@@ -76,23 +98,24 @@ pub fn select_files_tui(
     let mut stderr = io::stderr();
     execute!(stderr, EnterAlternateScreen, EnableMouseCapture)?;
     let backend = CrosstermBackend::new(io::stderr());
-    let mut terminal = Terminal::new(backend)?;
+    let terminal = Terminal::new(backend)?;
+    let mut terminal = TerminalGuard::new(terminal);
 
     // Event loop
     loop {
         // Render UI; pass mutable reference to state for rendering
-        terminal.draw(|f| tui_render::render(f, &mut state))?;
+        terminal
+            .terminal_mut()
+            .draw(|f| tui_render::render(f, &mut state))?;
 
         // Handle input
         let evt: Event = event::read()?;
         if let Some(msg) = tui_events::handle_event(&mut state, evt) {
             match msg {
                 tui_events::UiMsg::Quit => {
-                    cleanup_terminal(&mut terminal)?;
                     return Ok(vec![]);
                 }
                 tui_events::UiMsg::Submit => {
-                    cleanup_terminal(&mut terminal)?;
                     return Ok(state.selected_paths());
                 }
                 _ => {}

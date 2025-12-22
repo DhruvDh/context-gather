@@ -39,12 +39,12 @@ fn read_file_skips_binary_and_too_large() {
     let bin_path = bin_child.path().to_path_buf();
     fs::write(&bin_path, [0u8, 255u8, 0u8, 128u8]).unwrap();
     // Read and detect binary
-    let err = read_file(&bin_path, 1024).unwrap_err();
+    let err = read_file(&bin_path, 1024, dir.path()).unwrap_err();
 
     let huge_child = dir.child("huge.txt");
     let huge_path = huge_child.path().to_path_buf();
     fs::write(&huge_path, "x".repeat(2048).into_bytes()).unwrap();
-    let err2 = read_file(&huge_path, 1000).unwrap_err();
+    let err2 = read_file(&huge_path, 1000, dir.path()).unwrap_err();
 
     assert!(format!("{err}").contains("binary"), "{err}");
     assert!(format!("{err2}").contains("exceeds 1000"), "{err2}");

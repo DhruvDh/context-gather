@@ -4,6 +4,7 @@ pub mod constants;
 pub mod context;
 pub mod io;
 pub mod output;
+pub mod pipeline;
 pub mod tokenizer;
 pub mod ui;
 

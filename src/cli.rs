@@ -1,6 +1,15 @@
 use crate::constants::DEFAULT_MAX_FILE_SIZE;
 use clap::Parser;
 
+fn parse_chunk_index(s: &str) -> Result<isize, String> {
+    let idx: isize = s.parse().map_err(|_| format!("invalid chunk index: {s}"))?;
+    if idx >= -1 {
+        Ok(idx)
+    } else {
+        Err("chunk index must be >= 0 or -1 (none)".to_string())
+    }
+}
+
 #[derive(Parser, Debug)]
 #[command(name = "context-gather")]
 #[command(
@@ -32,23 +41,39 @@ pub struct Cli {
     #[arg(long = "exclude-paths")]
     pub exclude: Vec<String>,
 
-    /// Maximum token count for model context; warn if exceeded.
-    #[arg(long = "model-context", default_value = "200000")]
+    /// Maximum token count for model context; warn if exceeded (default 200000).
+    #[arg(long = "model-context")]
     pub model_context: Option<usize>,
+
+    /// Disable model context warnings and token-count summary.
+    #[arg(
+        long = "no-model-context",
+        default_value_t = false,
+        conflicts_with = "model_context"
+    )]
+    pub no_model_context: bool,
+
+    /// Tokenizer model name (defaults to GPT-5.2).
+    #[arg(long = "tokenizer-model")]
+    pub tokenizer_model: Option<String>,
 
     /// Split the context into chunks no larger than this many tokens (omit to disable chunking).
     #[arg(short = 'c', long = "chunk-size")]
     pub chunk_size: Option<usize>,
 
     /// Which chunk to copy (0-based); -1 means none.
-    #[arg(short = 'k', long = "chunk-index", default_value_t = -1)]
-    pub chunk_index: isize,
+    #[arg(short = 'k', long = "chunk-index", value_parser = parse_chunk_index, requires = "chunk_size")]
+    pub chunk_index: Option<isize>,
 
     /// Enable multi-step mode: copy only header initially; then serve files on demand (use -i for TUI file picker).
-    #[arg(short = 'm', long = "multi-step")]
+    #[arg(short = 'm', long = "multi-step", conflicts_with = "chunk_size")]
     pub multi_step: bool,
 
-    /// Escape XML special characters in content and attributes.
+    /// Include git metadata (branch, recent commits, diff) in the header.
+    #[arg(long = "git-info", default_value_t = false)]
+    pub git_info: bool,
+
+    /// Escape XML special characters in content (attributes are always escaped when needed).
     #[arg(long = "escape-xml", default_value_t = false)]
     pub escape_xml: bool,
 }

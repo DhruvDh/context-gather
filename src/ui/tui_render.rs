@@ -1,16 +1,17 @@
-use crate::ui::tui_state::{UiState, adjust_scroll_and_slice};
-use tui::{
+use crate::ui::tui_state::{
+    UiState, adjust_scroll_and_slice, clamp_selection, filtered_exts, filtered_files,
+};
+use ratatui::{
     Frame,
-    backend::Backend,
     layout::{Constraint, Direction, Layout},
     style::{Color, Style},
-    text::{Span, Spans},
+    text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
 };
 
 /// Renders the TUI given the current state, updating scroll offsets.
-pub fn render<B: Backend>(
-    frame: &mut Frame<B>,
+pub fn render(
+    frame: &mut Frame<'_>,
     state: &mut UiState,
 ) {
     // Layout: search bar (3 lines), list area, then help bar
@@ -21,7 +22,7 @@ pub fn render<B: Backend>(
             Constraint::Min(1),
             Constraint::Length(1),
         ])
-        .split(frame.size());
+        .split(frame.area());
 
     // Search bar title and input binding
     let (title, input) = if state.extension_mode {
@@ -44,8 +45,12 @@ pub fn render<B: Backend>(
     let max_lines = area.height.saturating_sub(2) as usize;
 
     if state.extension_mode {
-        state.ensure_filtered_exts();
-        let list = &state.filtered_exts;
+        let list = filtered_exts(state);
+        clamp_selection(
+            &mut state.ext_selected_idx,
+            &mut state.ext_scroll_offset,
+            list.len(),
+        );
 
         // Adjust scroll and get visible window
         let (offset, end) = adjust_scroll_and_slice(
@@ -62,7 +67,7 @@ pub fn render<B: Backend>(
             .map(|&idx| {
                 let (text, checked) = &state.extension_items[idx];
                 let mark = if *checked { "[x]" } else { "[ ]" };
-                let spans = Spans::from(vec![
+                let spans = Line::from(vec![
                     Span::styled(mark, Style::default().fg(Color::Yellow)),
                     Span::raw(" "),
                     Span::raw(text.clone()),
@@ -73,14 +78,23 @@ pub fn render<B: Backend>(
 
         // Render Extensions list with highlighting
         let mut list_state = ListState::default();
-        list_state.select(Some(state.ext_selected_idx.saturating_sub(offset)));
+        let selected = if window.is_empty() {
+            None
+        } else {
+            Some(state.ext_selected_idx.saturating_sub(offset))
+        };
+        list_state.select(selected);
         let widget = List::new(items)
             .block(Block::default().borders(Borders::ALL).title("Extensions"))
             .highlight_style(Style::default().bg(Color::Blue));
         frame.render_stateful_widget(widget, area, &mut list_state);
     } else {
-        state.ensure_filtered_files();
-        let list = &state.filtered_files;
+        let list = filtered_files(state);
+        clamp_selection(
+            &mut state.selected_idx,
+            &mut state.scroll_offset,
+            list.len(),
+        );
 
         // Adjust scroll and get visible window
         let (offset, end) = adjust_scroll_and_slice(
@@ -98,7 +112,7 @@ pub fn render<B: Backend>(
                 let text = &state.item_display[idx];
                 let checked = state.items[idx].1;
                 let mark = if checked { "[x]" } else { "[ ]" };
-                let spans = Spans::from(vec![
+                let spans = Line::from(vec![
                     Span::styled(mark, Style::default().fg(Color::Yellow)),
                     Span::raw(" "),
                     Span::raw(text.clone()),
@@ -109,7 +123,12 @@ pub fn render<B: Backend>(
 
         // Render Files list with highlighting
         let mut list_state = ListState::default();
-        list_state.select(Some(state.selected_idx.saturating_sub(offset)));
+        let selected = if window.is_empty() {
+            None
+        } else {
+            Some(state.selected_idx.saturating_sub(offset))
+        };
+        list_state.select(selected);
         let widget = List::new(items)
             .block(Block::default().borders(Borders::ALL).title("Files"))
             .highlight_style(Style::default().bg(Color::Blue));
@@ -125,6 +144,6 @@ pub fn render<B: Backend>(
         Span::styled("q: Quit", Style::default().fg(Color::Yellow)),
     ];
     let help_bar =
-        Paragraph::new(Spans::from(help_text)).block(Block::default().borders(Borders::ALL));
+        Paragraph::new(Line::from(help_text)).block(Block::default().borders(Borders::ALL));
     frame.render_widget(help_bar, chunks[2]);
 }

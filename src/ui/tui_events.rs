@@ -1,4 +1,4 @@
-use crate::ui::tui_state::UiState;
+use crate::ui::tui_state::{UiState, clamp_selection, filtered_exts, filtered_files};
 use crossterm::event::{Event, KeyCode, KeyModifiers};
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -64,20 +64,22 @@ pub fn handle_event(
                         .for_each(|(_, c)| *c = false);
                     state.extension_search.clear();
                 }
-                state.ensure_filtered_exts();
             } else {
                 // exiting: restore
                 state.search_input = state.saved_search_input.clone();
                 state.extension_mode = false;
-                state.ensure_filtered_files();
             }
             return Some(UiMsg::ToggleExtensionMode);
         }
 
         // If in extension-filter mode
         if state.extension_mode {
-            state.ensure_filtered_exts();
-            let filtered_ext = &state.filtered_exts;
+            let mut filtered_ext = filtered_exts(state);
+            clamp_selection(
+                &mut state.ext_selected_idx,
+                &mut state.ext_scroll_offset,
+                filtered_ext.len(),
+            );
             match code {
                 KeyCode::Up => state.ext_selected_idx = state.ext_selected_idx.saturating_sub(1),
                 KeyCode::Down => {
@@ -87,7 +89,12 @@ pub fn handle_event(
                 }
                 KeyCode::Backspace => {
                     state.extension_search.pop();
-                    state.ensure_filtered_exts();
+                    filtered_ext = filtered_exts(state);
+                    clamp_selection(
+                        &mut state.ext_selected_idx,
+                        &mut state.ext_scroll_offset,
+                        filtered_ext.len(),
+                    );
                 }
                 // Space toggles the current extension
                 KeyCode::Char(' ') => {
@@ -98,7 +105,12 @@ pub fn handle_event(
                 // Other chars update the extension search
                 KeyCode::Char(c) => {
                     state.extension_search.push(c);
-                    state.ensure_filtered_exts();
+                    filtered_ext = filtered_exts(state);
+                    clamp_selection(
+                        &mut state.ext_selected_idx,
+                        &mut state.ext_scroll_offset,
+                        filtered_ext.len(),
+                    );
                 }
                 KeyCode::Enter => {
                     let chosen_exts: HashSet<String> = state
@@ -114,7 +126,6 @@ pub fn handle_event(
                     apply_extension_items(&chosen_exts, &mut state.items, false, &all_known);
                     state.extension_mode = false;
                     state.search_input = state.saved_search_input.clone();
-                    state.ensure_filtered_files();
                 }
                 _ => {}
             }
@@ -122,33 +133,37 @@ pub fn handle_event(
         }
 
         // build filtered file indices for fuzzy search
-        state.ensure_filtered_files();
-        let filtered_files = &state.filtered_files;
+        let mut filtered_file_indices = filtered_files(state);
+        clamp_selection(
+            &mut state.selected_idx,
+            &mut state.scroll_offset,
+            filtered_file_indices.len(),
+        );
 
         // Ctrl-based bulk commands on filtered files
         if mods.contains(KeyModifiers::CONTROL) {
             match code {
                 KeyCode::Char('a') => {
-                    let all_sel = filtered_files.iter().all(|&i| state.items[i].1);
-                    filtered_files
+                    let all_sel = filtered_file_indices.iter().all(|&i| state.items[i].1);
+                    filtered_file_indices
                         .iter()
                         .for_each(|&i| state.items[i].1 = !all_sel);
                     return Some(UiMsg::ToggleAll);
                 }
                 KeyCode::Char('u') => {
-                    filtered_files
+                    filtered_file_indices
                         .iter()
                         .for_each(|&i| state.items[i].1 = false);
                     return Some(UiMsg::UnselectAll);
                 }
                 KeyCode::Char('i') => {
-                    filtered_files
+                    filtered_file_indices
                         .iter()
                         .for_each(|&i| state.items[i].1 = !state.items[i].1);
                     return Some(UiMsg::InvertSelection);
                 }
                 KeyCode::Char('o') => {
-                    if let Some(&orig) = filtered_files.get(state.selected_idx) {
+                    if let Some(&orig) = filtered_file_indices.get(state.selected_idx) {
                         state.items.iter_mut().for_each(|(_, c)| *c = false);
                         state.items[orig].1 = true;
                     }
@@ -164,13 +179,23 @@ pub fn handle_event(
             match code {
                 KeyCode::Backspace => {
                     state.search_input.pop();
-                    state.ensure_filtered_files();
+                    filtered_file_indices = filtered_files(state);
+                    clamp_selection(
+                        &mut state.selected_idx,
+                        &mut state.scroll_offset,
+                        filtered_file_indices.len(),
+                    );
                     return None;
                 }
                 // push normal chars into search, but skip space and 'q'
                 KeyCode::Char(c) if c != ' ' && c != 'q' => {
                     state.search_input.push(c);
-                    state.ensure_filtered_files();
+                    filtered_file_indices = filtered_files(state);
+                    clamp_selection(
+                        &mut state.selected_idx,
+                        &mut state.scroll_offset,
+                        filtered_file_indices.len(),
+                    );
                     return None;
                 }
                 _ => {}
@@ -181,7 +206,7 @@ pub fn handle_event(
         match code {
             KeyCode::Char('q') | KeyCode::Esc => return Some(UiMsg::Quit),
             KeyCode::Down => {
-                if state.selected_idx + 1 < filtered_files.len() {
+                if state.selected_idx + 1 < filtered_file_indices.len() {
                     state.selected_idx += 1;
                 }
                 return Some(UiMsg::SelectNext);
@@ -191,7 +216,7 @@ pub fn handle_event(
                 return Some(UiMsg::SelectPrev);
             }
             KeyCode::Char(' ') => {
-                if let Some(&orig) = filtered_files.get(state.selected_idx) {
+                if let Some(&orig) = filtered_file_indices.get(state.selected_idx) {
                     state.items[orig].1 = !state.items[orig].1;
                 }
                 return Some(UiMsg::ToggleCurrent);

@@ -5,7 +5,7 @@ use crate::context::xml::{maybe_escape_attr, maybe_escape_text};
 use crate::io::clipboard;
 use crate::output;
 use anyhow::Result;
-use glob::Pattern;
+use globset::{Glob, GlobSetBuilder};
 use path_slash::PathBufExt;
 use std::io::{self, Write};
 
@@ -16,11 +16,13 @@ pub fn multi_step_mode(
     config: &Config,
 ) -> Result<()> {
     // Header snippet without closing </shared-context>
-    let snippet = output::format_header_snippet(chunks);
-    // Always output the header snippet
-    print!("{}", snippet);
+    let snippet = chunks.first().map(|c| c.xml.as_str()).unwrap_or("");
+    // Output the header snippet if requested
+    if config.stdout {
+        print!("{}", snippet);
+    }
     if !config.no_clipboard {
-        clipboard::copy_to_clipboard(&snippet, false, false)?;
+        clipboard::copy_to_clipboard(snippet, false, false)?;
     }
     // Display REPL instructions
     eprintln!("Commands: enter file ids, file paths, or glob patterns; type 'q' to quit.");
@@ -47,9 +49,12 @@ pub fn multi_step_mode(
                 eprintln!("Invalid file id: {}", id);
                 continue;
             }
-        } else if let Ok(pat) = Pattern::new(cmd) {
+        } else if let Ok(glob) = Glob::new(&cmd.replace('\\', "/")) {
+            let mut builder = GlobSetBuilder::new();
+            builder.add(glob);
+            let matcher = builder.build().unwrap();
             for (i, fc) in file_data.iter().enumerate() {
-                if pat.matches(fc.path.to_slash_lossy().as_ref()) {
+                if matcher.is_match(fc.path.to_slash_lossy().as_ref()) {
                     selected.push(i);
                 }
             }

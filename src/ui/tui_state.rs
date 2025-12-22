@@ -1,5 +1,5 @@
 use fuzzy_matcher::{FuzzyMatcher, skim::SkimMatcherV2};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 /// Shared UI state for file selection TUI
@@ -8,13 +8,9 @@ pub struct UiState {
     pub item_display: Vec<String>,
     pub ext_counts: HashMap<String, usize>,
     pub search_input: String,
-    pub file_query_cache: String,
-    pub filtered_files: Vec<usize>,
     pub extension_mode: bool,
     pub extension_items: Vec<(String, bool)>,
     pub extension_search: String,
-    pub extension_query_cache: String,
-    pub filtered_exts: Vec<usize>,
     pub ext_selected_idx: usize,
     pub ext_scroll_offset: usize,
     pub reset_ext_on_toggle: bool,
@@ -48,6 +44,7 @@ impl UiState {
             path.display().to_string()
         }
 
+        let preselected: HashSet<PathBuf> = preselected.iter().cloned().collect();
         // Build items with initial checked state
         let items: Vec<(PathBuf, bool)> = paths
             .into_iter()
@@ -66,25 +63,21 @@ impl UiState {
             }
         }
 
-        // Build extension items sorted by count
-        let mut ext_keys: Vec<String> = ext_counts.keys().cloned().collect();
-        ext_keys.sort();
-        let ext_items: Vec<(String, bool)> = ext_keys.into_iter().map(|e| (e, false)).collect();
+        // Build extension items sorted by count (desc), then name
+        let mut ext_keys: Vec<(String, usize)> =
+            ext_counts.iter().map(|(k, v)| (k.clone(), *v)).collect();
+        ext_keys.sort_by(|(a, ac), (b, bc)| bc.cmp(ac).then_with(|| a.cmp(b)));
+        let ext_items: Vec<(String, bool)> =
+            ext_keys.into_iter().map(|(e, _)| (e, false)).collect();
 
-        let items_len = items.len();
-        let ext_items_len = ext_items.len();
         UiState {
             items,
             item_display,
             ext_counts,
             search_input: String::new(),
-            file_query_cache: String::new(),
-            filtered_files: (0..items_len).collect(),
             extension_mode: false,
             extension_items: ext_items,
             extension_search: String::new(),
-            extension_query_cache: String::new(),
-            filtered_exts: (0..ext_items_len).collect(),
             ext_selected_idx: 0,
             ext_scroll_offset: 0,
             reset_ext_on_toggle: true,
@@ -102,71 +95,61 @@ impl UiState {
             .map(|(p, _)| p.clone())
             .collect()
     }
+}
 
-    pub fn ensure_filtered_files(&mut self) {
-        if self.search_input == self.file_query_cache {
-            return;
-        }
-        let matcher = SkimMatcherV2::default();
-        let mut entries: Vec<(usize, i64)> = if self.search_input.is_empty() {
-            (0..self.items.len()).map(|idx| (idx, 0)).collect()
-        } else {
-            self.item_display
-                .iter()
-                .enumerate()
-                .filter_map(|(idx, text)| {
-                    matcher
-                        .fuzzy_match(text, &self.search_input)
-                        .map(|score| (idx, score))
-                })
-                .collect()
-        };
-        entries.sort_unstable_by_key(|&(_, score)| std::cmp::Reverse(score));
-        self.filtered_files = entries.into_iter().map(|(idx, _)| idx).collect();
-        self.file_query_cache = self.search_input.clone();
-        if self.filtered_files.is_empty() {
-            self.selected_idx = 0;
-            self.scroll_offset = 0;
-        } else {
-            self.selected_idx = self
-                .selected_idx
-                .min(self.filtered_files.len().saturating_sub(1));
-            self.scroll_offset = self.scroll_offset.min(self.selected_idx);
-        }
-    }
+pub fn filtered_files(state: &UiState) -> Vec<usize> {
+    let matcher = SkimMatcherV2::default();
+    let mut entries: Vec<(usize, i64)> = if state.search_input.is_empty() {
+        (0..state.items.len()).map(|idx| (idx, 0)).collect()
+    } else {
+        state
+            .item_display
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, text)| {
+                matcher
+                    .fuzzy_match(text, &state.search_input)
+                    .map(|score| (idx, score))
+            })
+            .collect()
+    };
+    entries.sort_unstable_by_key(|&(_, score)| std::cmp::Reverse(score));
+    entries.into_iter().map(|(idx, _)| idx).collect()
+}
 
-    pub fn ensure_filtered_exts(&mut self) {
-        if self.extension_search == self.extension_query_cache {
-            return;
-        }
-        let matcher = SkimMatcherV2::default();
-        let mut entries: Vec<(usize, i64)> = if self.extension_search.is_empty() {
-            (0..self.extension_items.len())
-                .map(|idx| (idx, 0))
-                .collect()
-        } else {
-            self.extension_items
-                .iter()
-                .enumerate()
-                .filter_map(|(idx, (ext, _))| {
-                    matcher
-                        .fuzzy_match(ext, &self.extension_search)
-                        .map(|score| (idx, score))
-                })
-                .collect()
-        };
-        entries.sort_unstable_by_key(|&(_, score)| std::cmp::Reverse(score));
-        self.filtered_exts = entries.into_iter().map(|(idx, _)| idx).collect();
-        self.extension_query_cache = self.extension_search.clone();
-        if self.filtered_exts.is_empty() {
-            self.ext_selected_idx = 0;
-            self.ext_scroll_offset = 0;
-        } else {
-            self.ext_selected_idx = self
-                .ext_selected_idx
-                .min(self.filtered_exts.len().saturating_sub(1));
-            self.ext_scroll_offset = self.ext_scroll_offset.min(self.ext_selected_idx);
-        }
+pub fn filtered_exts(state: &UiState) -> Vec<usize> {
+    let matcher = SkimMatcherV2::default();
+    let mut entries: Vec<(usize, i64)> = if state.extension_search.is_empty() {
+        (0..state.extension_items.len())
+            .map(|idx| (idx, 0))
+            .collect()
+    } else {
+        state
+            .extension_items
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, (ext, _))| {
+                matcher
+                    .fuzzy_match(ext, &state.extension_search)
+                    .map(|score| (idx, score))
+            })
+            .collect()
+    };
+    entries.sort_unstable_by_key(|&(_, score)| std::cmp::Reverse(score));
+    entries.into_iter().map(|(idx, _)| idx).collect()
+}
+
+pub fn clamp_selection(
+    selected_idx: &mut usize,
+    scroll_offset: &mut usize,
+    list_len: usize,
+) {
+    if list_len == 0 {
+        *selected_idx = 0;
+        *scroll_offset = 0;
+    } else {
+        *selected_idx = (*selected_idx).min(list_len.saturating_sub(1));
+        *scroll_offset = (*scroll_offset).min(*selected_idx);
     }
 }
 

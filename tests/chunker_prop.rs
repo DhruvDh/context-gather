@@ -32,4 +32,23 @@ proptest! {
             prop_assert!(glued.contains(l));
         }
     }
+
+    #[test]
+    fn chunks_respect_limit_for_small_lines(repeats in prop::collection::vec(1usize..6, 1..60),
+                                            limit in 50usize..200usize) {
+        let contents = repeats
+            .into_iter()
+            .map(|n| "tok ".repeat(n))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let file = FileContents {
+            folder: PathBuf::from("."),
+            path: PathBuf::from("small.txt"),
+            contents,
+        };
+        let (chunks, _) = build_chunks(&[file], limit, false);
+        for chunk in chunks {
+            prop_assert!(chunk.tokens <= limit);
+        }
+    }
 }

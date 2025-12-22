@@ -16,7 +16,7 @@ fn chunk_index_requires_chunk_size() {
         ])
         .assert()
         .failure()
-        .code(3);
+        .code(2);
 }
 
 #[test]

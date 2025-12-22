@@ -77,10 +77,10 @@ fn part_counts_match_output() {
     for segment in joined.split("part=\"").skip(1) {
         if let Some(raw) = segment.split('"').next() {
             let mut iter = raw.split('/');
-            if let (Some(idx), Some(total)) = (iter.next(), iter.next())
-                && let (Ok(idx), Ok(total)) = (idx.parse::<usize>(), total.parse::<usize>())
-            {
-                parts.push((idx, total));
+            if let (Some(idx), Some(total)) = (iter.next(), iter.next()) {
+                if let (Ok(idx), Ok(total)) = (idx.parse::<usize>(), total.parse::<usize>()) {
+                    parts.push((idx, total));
+                }
             }
         }
     }
@@ -90,4 +90,34 @@ fn part_counts_match_output() {
     let max_idx = parts.iter().map(|(i, _)| *i).max().unwrap();
     assert_eq!(max_idx, total);
     assert_eq!(meta[0].parts, total);
+}
+
+#[test]
+fn file_paths_match_meta_parts() {
+    let files = vec![
+        FileContents {
+            folder: PathBuf::from("."),
+            path: PathBuf::from("a.txt"),
+            contents: "line\n".repeat(5),
+        },
+        FileContents {
+            folder: PathBuf::from("."),
+            path: PathBuf::from("big.txt"),
+            contents: "line\n".repeat(200),
+        },
+    ];
+    let (chunks, metas) = build_chunks(&files, 50, false);
+    let joined: String = chunks.iter().map(|c| c.xml.clone()).collect();
+    for meta in metas {
+        let needle = format!("path=\"{}\"", meta.path.display());
+        let count = joined.matches(&needle).count();
+        assert_eq!(
+            count,
+            meta.parts,
+            "expected {} to appear {} times, saw {}",
+            meta.path.display(),
+            meta.parts,
+            count
+        );
+    }
 }

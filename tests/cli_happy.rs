@@ -12,7 +12,7 @@ fn stdout_only_basic() {
         .assert()
         .success()
         .stdout(contains("<shared-context>"))
-        .stderr(predicates::str::is_empty());
+        .stderr(contains("OK"));
 }
 
 #[test]
@@ -31,6 +31,5 @@ fn chunk_size_splits_and_summarises() {
         .success()
         .stdout(contains("<context-chunk id="))
         .stdout(contains("<more remaining=\""))
-        .stdout(contains("OK")) // summary line
-        .stderr(predicates::str::is_empty());
+        .stderr(contains("OK"));
 }

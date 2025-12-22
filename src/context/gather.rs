@@ -70,12 +70,13 @@ pub fn gather_all_file_paths(paths: &[PathBuf]) -> Result<Vec<PathBuf>> {
 pub fn collect_file_data(
     file_paths: &[PathBuf],
     max_size: u64,
+    root: &Path,
 ) -> Result<Vec<FileContents>> {
     let mut results = Vec::new();
     for path in file_paths {
-        match read_file(path, max_size) {
+        match read_file(path, max_size, root) {
             Ok(fc) => results.push(fc),
-            Err(e) => tracing::warn!("{e}"),
+            Err(e) => eprintln!("{e}"),
         }
     }
     // Sort by folder then file name
@@ -98,6 +99,7 @@ pub fn count_tokens(text: &str) -> usize {
 pub fn read_file(
     path: &Path,
     max_size: u64,
+    root: &Path,
 ) -> Result<FileContents> {
     // Enforce the maximum file size
     let metadata = fs::metadata(path)?;
@@ -110,19 +112,17 @@ pub fn read_file(
     }
     // Read the entire file into memory
     let content_bytes = fs::read(path)?;
-    // Binary detection: treat invalid UTF-8 in a sample as binary
-    let sample_size = content_bytes.len().min(4096);
-    if sample_size > 0 && std::str::from_utf8(&content_bytes[..sample_size]).is_err() {
-        return Err(anyhow!(
-            "Warning: {:?} appears to be a binary file. Skipping.",
-            path
-        ));
-    }
-    // Convert to UTF-8, replacing invalid sequences to avoid double allocation
-    let contents = String::from_utf8_lossy(&content_bytes).into_owned();
+    // Convert to UTF-8; treat invalid UTF-8 as binary
+    let contents = String::from_utf8(content_bytes)
+        .map_err(|_| anyhow!("Warning: {:?} appears to be a binary file. Skipping.", path))?;
+    let rel_path = path.strip_prefix(root).unwrap_or(path).to_path_buf();
+    let folder = rel_path
+        .parent()
+        .unwrap_or_else(|| Path::new(""))
+        .to_path_buf();
     Ok(FileContents {
-        folder: path.parent().unwrap_or_else(|| Path::new("")).to_path_buf(),
-        path: path.to_path_buf(),
+        folder,
+        path: rel_path,
         contents,
     })
 }
@@ -138,7 +138,8 @@ mod tests {
         let fp = dir.join("ctx_gather_test");
         let s = "é 中文 ";
         fs::write(&fp, s)?;
-        let files = collect_file_data(std::slice::from_ref(&fp), u64::MAX)?;
+        let root = env::current_dir()?;
+        let files = collect_file_data(std::slice::from_ref(&fp), u64::MAX, &root)?;
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].contents, s);
         let _ = fs::remove_file(&fp);

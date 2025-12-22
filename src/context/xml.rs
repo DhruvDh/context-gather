@@ -22,6 +22,11 @@ fn escape_xml_inner(
     out
 }
 
+fn needs_escape_attr(s: &str) -> bool {
+    s.bytes()
+        .any(|b| matches!(b, b'&' | b'<' | b'>' | b'"' | b'\''))
+}
+
 pub(crate) fn maybe_escape_text<'a>(
     s: &'a str,
     escape_xml: bool,
@@ -37,7 +42,7 @@ pub(crate) fn maybe_escape_attr<'a>(
     s: &'a str,
     escape_xml: bool,
 ) -> Cow<'a, str> {
-    if escape_xml {
+    if escape_xml || needs_escape_attr(s) {
         Cow::Owned(escape_xml_inner(s, true))
     } else {
         Cow::Borrowed(s)
@@ -73,12 +78,17 @@ pub fn build_xml_with_escape(
     let mut current_folder: Option<String> = None;
     for file in files {
         let folder = file.folder.to_slash_lossy().to_string();
-        let folder_attr = maybe_escape_attr(&folder, escape_xml);
-        if current_folder.as_ref() != Some(&folder) {
+        let folder_display = if folder.is_empty() {
+            ".".to_string()
+        } else {
+            folder
+        };
+        let folder_attr = maybe_escape_attr(&folder_display, escape_xml);
+        if current_folder.as_ref() != Some(&folder_display) {
             if current_folder.is_some() {
                 xml.push_str("  </folder>\n");
             }
-            current_folder = Some(folder.clone());
+            current_folder = Some(folder_display.clone());
             xml.push_str(&format!(
                 "  <folder path=\"{folder}\">\n",
                 folder = folder_attr

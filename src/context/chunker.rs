@@ -2,7 +2,9 @@
 use crate::context::types::FileContents;
 use crate::context::xml::{maybe_escape_attr, maybe_escape_text};
 use crate::tokenizer::count as count_tokens;
+use path_slash::PathExt;
 use std::path::{Path, PathBuf};
+use tracing::warn;
 
 /// Metadata for each file in the context header
 pub struct FileMeta {
@@ -19,177 +21,55 @@ pub struct Chunk {
     pub tokens: usize,
 }
 
-fn split_oversize_parts(
-    lines: &[&str],
-    path: &Path,
-    total_parts: usize,
-    max_tokens: usize,
-    escape_xml: bool,
-) -> Vec<String> {
-    let mut parts = Vec::new();
-    let mut part_xml = String::new();
-    let mut part_tok = 0usize;
-    let mut part_idx = 1usize;
-    let mut overhead = count_tokens(&wrap_part(path, part_idx, total_parts, "", escape_xml));
-    for line in lines {
-        let new_tok = count_tokens(line) + 1; // include newline
-        if !part_xml.is_empty() && part_tok + new_tok + overhead > max_tokens {
-            parts.push(std::mem::take(&mut part_xml));
-            part_tok = 0;
-            part_idx += 1;
-            overhead = count_tokens(&wrap_part(path, part_idx, total_parts, "", escape_xml));
-        }
-        part_xml.push_str(line);
-        part_xml.push('\n');
-        part_tok += new_tok;
-    }
-    if !part_xml.is_empty() {
-        parts.push(part_xml);
-    }
-    parts
+/// Represents one file block inside a chunk
+pub struct FileBlock {
+    pub xml: String,
+    pub tokens: usize,
 }
 
-/// Builds smart chunks and metadata for header
-/// Splits between file-contents blocks, and splits oversize files
-pub fn build_chunks(
+/// Represents a chunk body prior to wrapper rendering
+pub struct ChunkBody {
+    pub blocks: Vec<FileBlock>,
+    pub tokens: usize,
+}
+
+/// Build metadata for files without chunking or splitting.
+pub fn build_file_meta(
     files: &[FileContents],
-    max_tokens: usize,
     escape_xml: bool,
-) -> (Vec<Chunk>, Vec<FileMeta>) {
-    // If max_tokens is zero, do not split: generate one chunk with all files
-    if max_tokens == 0 {
-        let mut metas = Vec::new();
-        let mut xml_all = String::new();
-        for (file_id, file) in files.iter().enumerate() {
+) -> Vec<FileMeta> {
+    files
+        .iter()
+        .enumerate()
+        .map(|(file_id, file)| {
             let contents = maybe_escape_text(&file.contents, escape_xml);
-            let path = file.path.display().to_string();
-            let path_attr = maybe_escape_attr(&path, escape_xml);
-            let name = file
-                .path
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_default();
-            let name_attr = maybe_escape_attr(&name, escape_xml);
-            let file_block = format!(
-                "    <file-contents path=\"{}\" name=\"{}\">\n{}\n    </file-contents>\n",
-                path_attr, name_attr, contents,
-            );
-            let file_tok = count_tokens(&file_block);
-            xml_all.push_str(&file_block);
-            metas.push(FileMeta {
+            let content_tokens = count_tokens(contents.as_ref());
+            FileMeta {
                 id: file_id,
                 path: file.path.clone(),
-                tokens: file_tok,
+                tokens: content_tokens,
                 parts: 1,
-            });
-        }
-        let total_toks = count_tokens(&xml_all);
-        let chunk = Chunk {
-            index: 0,
-            xml: xml_all,
-            tokens: total_toks,
-        };
-        return (vec![chunk], metas);
-    }
-    let mut chunks = Vec::<Chunk>::new();
-    let mut metas = Vec::<FileMeta>::new();
-    let mut current_xml = String::new();
-    let mut current_toks = 0usize;
-    let mut file_id = 0usize;
-
-    // Helper to push a chunk if non-empty, resetting xml and toks
-    let mut push_chunk = |xml: &mut String, toks: &mut usize| {
-        if !xml.is_empty() {
-            let idx = chunks.len();
-            chunks.push(Chunk {
-                index: idx,
-                xml: std::mem::take(xml),
-                tokens: *toks,
-            });
-            *toks = 0;
-        }
-    };
-
-    for file in files {
-        let contents = maybe_escape_text(&file.contents, escape_xml);
-        let contents_str = contents.as_ref();
-        let path = file.path.display().to_string();
-        let path_attr = maybe_escape_attr(&path, escape_xml);
-        let name = file
-            .path
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_default();
-        let name_attr = maybe_escape_attr(&name, escape_xml);
-        let file_block = format!(
-            "    <file-contents path=\"{}\" name=\"{}\">\n{}\n    </file-contents>\n",
-            path_attr, name_attr, contents_str,
-        );
-        let file_tok = count_tokens(&file_block);
-
-        // fits entirely in current chunk
-        if current_toks + file_tok <= max_tokens {
-            current_xml.push_str(&file_block);
-            current_toks += file_tok;
-            metas.push(FileMeta {
-                id: file_id,
-                path: file.path.clone(),
-                tokens: file_tok,
-                parts: 1,
-            });
-            file_id += 1;
-            continue;
-        }
-
-        // start new chunk if file alone fits
-        if file_tok <= max_tokens {
-            push_chunk(&mut current_xml, &mut current_toks);
-            current_xml.push_str(&file_block);
-            current_toks = file_tok;
-            metas.push(FileMeta {
-                id: file_id,
-                path: file.path.clone(),
-                tokens: file_tok,
-                parts: 1,
-            });
-            file_id += 1;
-            continue;
-        }
-
-        // oversize file: split into parts by lines
-        let lines: Vec<&str> = contents_str.split('\n').collect();
-        let mut parts_target = 1usize;
-        let parts = loop {
-            let parts =
-                split_oversize_parts(&lines, &file.path, parts_target, max_tokens, escape_xml);
-            let actual = parts.len().max(1);
-            if actual == parts_target {
-                break parts;
             }
-            parts_target = actual;
-        };
-        let mut total_file_tokens = 0usize;
-        let parts_count = parts.len().max(1);
-        for (idx, body) in parts.iter().enumerate() {
-            let wrapped = wrap_part(&file.path, idx + 1, parts_count, body, escape_xml);
-            push_chunk(&mut current_xml, &mut current_toks);
-            let wrapped_tok = count_tokens(&wrapped);
-            current_xml.push_str(&wrapped);
-            current_toks = wrapped_tok;
-            total_file_tokens += wrapped_tok;
-        }
-        metas.push(FileMeta {
-            id: file_id,
-            path: file.path.clone(),
-            tokens: total_file_tokens,
-            parts: parts_count,
-        });
-        file_id += 1;
-    }
+        })
+        .collect()
+}
 
-    // push final chunk
-    push_chunk(&mut current_xml, &mut current_toks);
-    (chunks, metas)
+fn wrap_file(
+    path: &Path,
+    body: &str,
+    escape_xml: bool,
+) -> String {
+    let filename = path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let path_str = path.to_slash_lossy().to_string();
+    let path_attr = maybe_escape_attr(&path_str, escape_xml);
+    let filename_attr = maybe_escape_attr(&filename, escape_xml);
+    format!(
+        "    <file-contents path=\"{}\" name=\"{}\">\n{}\n    </file-contents>\n",
+        path_attr, filename_attr, body
+    )
 }
 
 // Wrap a sub-part of a file into its own XML block
@@ -200,18 +80,205 @@ fn wrap_part(
     body: &str,
     escape_xml: bool,
 ) -> String {
-    // Safely extract filename, fallback to empty string
     let filename = path
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_default();
-    let path_str = path.display().to_string();
+    let path_str = path.to_slash_lossy().to_string();
     let path_attr = maybe_escape_attr(&path_str, escape_xml);
     let filename_attr = maybe_escape_attr(&filename, escape_xml);
     format!(
         "    <file-contents path=\"{}\" name=\"{}\" part=\"{}/{}\">\n{}    </file-contents>\n",
         path_attr, filename_attr, idx, total, body
     )
+}
+
+fn split_with_total(
+    lines: &[String],
+    path: &Path,
+    max_tokens: usize,
+    escape_xml: bool,
+    total_parts: usize,
+) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    let mut part_idx = 1usize;
+
+    for line in lines {
+        if current.is_empty() {
+            current.push_str(line);
+            let wrapped = wrap_part(path, part_idx, total_parts, &current, escape_xml);
+            let wrapped_tokens = count_tokens(&wrapped);
+            if wrapped_tokens > max_tokens {
+                warn!(
+                    "line in {:?} exceeds chunk size {}; emitting oversize part",
+                    path, max_tokens
+                );
+                parts.push(std::mem::take(&mut current));
+                part_idx += 1;
+            }
+            continue;
+        }
+
+        let prev_len = current.len();
+        current.push_str(line);
+        let wrapped = wrap_part(path, part_idx, total_parts, &current, escape_xml);
+        let wrapped_tokens = count_tokens(&wrapped);
+        if wrapped_tokens > max_tokens {
+            current.truncate(prev_len);
+            parts.push(std::mem::take(&mut current));
+            part_idx += 1;
+
+            current.push_str(line);
+            let wrapped = wrap_part(path, part_idx, total_parts, &current, escape_xml);
+            let wrapped_tokens = count_tokens(&wrapped);
+            if wrapped_tokens > max_tokens {
+                warn!(
+                    "line in {:?} exceeds chunk size {}; emitting oversize part",
+                    path, max_tokens
+                );
+                parts.push(std::mem::take(&mut current));
+                part_idx += 1;
+            }
+        }
+    }
+
+    if !current.is_empty() {
+        parts.push(current);
+    }
+
+    parts
+}
+
+fn split_file_into_parts(
+    contents: &str,
+    path: &Path,
+    max_tokens: usize,
+    escape_xml: bool,
+) -> Vec<String> {
+    let lines: Vec<String> = contents
+        .split('\n')
+        .map(|line| format!("{line}\n"))
+        .collect();
+    let mut target_parts = 1usize;
+    let mut last_parts = None;
+    for _ in 0..8 {
+        let parts = split_with_total(&lines, path, max_tokens, escape_xml, target_parts);
+        let actual = parts.len().max(1);
+        if actual == target_parts {
+            return parts;
+        }
+        if Some(actual) == last_parts {
+            let target = actual.max(target_parts);
+            return split_with_total(&lines, path, max_tokens, escape_xml, target);
+        }
+        last_parts = Some(target_parts);
+        target_parts = actual;
+    }
+    split_with_total(&lines, path, max_tokens, escape_xml, target_parts)
+}
+
+/// Builds chunk bodies and metadata for header
+/// Splits between file-contents blocks, and splits oversize files
+pub fn build_chunk_bodies(
+    files: &[FileContents],
+    max_tokens: usize,
+    escape_xml: bool,
+) -> (Vec<ChunkBody>, Vec<FileMeta>) {
+    let mut metas = Vec::<FileMeta>::new();
+    let mut blocks = Vec::<FileBlock>::new();
+
+    for (file_id, file) in files.iter().enumerate() {
+        let contents = maybe_escape_text(&file.contents, escape_xml);
+        let contents_str = contents.as_ref();
+        let content_tokens = count_tokens(contents_str);
+        let file_block = wrap_file(&file.path, contents_str, escape_xml);
+        let block_tokens = count_tokens(&file_block);
+
+        if max_tokens == 0 || block_tokens <= max_tokens {
+            blocks.push(FileBlock {
+                xml: file_block,
+                tokens: block_tokens,
+            });
+            metas.push(FileMeta {
+                id: file_id,
+                path: file.path.clone(),
+                tokens: content_tokens,
+                parts: 1,
+            });
+            continue;
+        }
+
+        let parts = split_file_into_parts(contents_str, &file.path, max_tokens, escape_xml);
+        let parts_count = parts.len().max(1);
+        for (idx, body) in parts.iter().enumerate() {
+            let wrapped = wrap_part(&file.path, idx + 1, parts_count, body, escape_xml);
+            let wrapped_tokens = count_tokens(&wrapped);
+            if wrapped_tokens > max_tokens {
+                warn!(
+                    "file {:?} part {} exceeds chunk size {}; emitting oversize part",
+                    file.path,
+                    idx + 1,
+                    max_tokens
+                );
+            }
+            blocks.push(FileBlock {
+                xml: wrapped,
+                tokens: wrapped_tokens,
+            });
+        }
+        metas.push(FileMeta {
+            id: file_id,
+            path: file.path.clone(),
+            tokens: content_tokens,
+            parts: parts_count,
+        });
+    }
+
+    let mut chunks = Vec::<ChunkBody>::new();
+    let mut current = ChunkBody {
+        blocks: Vec::new(),
+        tokens: 0,
+    };
+    for block in blocks {
+        if max_tokens > 0
+            && !current.blocks.is_empty()
+            && current.tokens + block.tokens > max_tokens
+        {
+            chunks.push(current);
+            current = ChunkBody {
+                blocks: Vec::new(),
+                tokens: 0,
+            };
+        }
+        current.tokens += block.tokens;
+        current.blocks.push(block);
+    }
+    if !current.blocks.is_empty() {
+        chunks.push(current);
+    }
+
+    (chunks, metas)
+}
+
+/// Builds smart chunks and metadata for header
+/// Splits between file-contents blocks, and splits oversize files
+pub fn build_chunks(
+    files: &[FileContents],
+    max_tokens: usize,
+    escape_xml: bool,
+) -> (Vec<Chunk>, Vec<FileMeta>) {
+    let (bodies, metas) = build_chunk_bodies(files, max_tokens, escape_xml);
+    let chunks = bodies
+        .into_iter()
+        .enumerate()
+        .map(|(idx, body)| Chunk {
+            index: idx,
+            xml: body.blocks.into_iter().map(|b| b.xml).collect(),
+            tokens: body.tokens,
+        })
+        .collect();
+    (chunks, metas)
 }
 
 #[cfg(test)]

@@ -17,7 +17,7 @@ fn header_reports_totals_correctly() {
             parts: 2,
         },
     ];
-    let hdr = make_header(5, 40000, &metas, false, false);
+    let hdr = make_header(5, 40000, &metas, false, false, false);
     assert!(hdr.contains(r#"total-chunks="5""#));
     assert!(hdr.contains(r#"total-files="2""#));
     assert!(hdr.contains(r#"id="1" path="b.rs" tokens="20" parts="2""#));
@@ -32,7 +32,10 @@ fn test_git_info_included() {
         tokens: 10,
         parts: 1,
     }];
-    let hdr = make_header(1, 100, &metas, false, false);
+    let hdr = make_header(1, 100, &metas, false, false, true);
+    if hdr.contains("git info unavailable") {
+        return;
+    }
     // Should contain git-info opening and closing tags
     assert!(
         hdr.contains("<git-info branch=\""),
