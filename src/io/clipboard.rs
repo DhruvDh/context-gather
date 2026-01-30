@@ -8,24 +8,21 @@ fn try_copy(text: &str) -> Result<()> {
 }
 
 /// Copy text to clipboard, warning on failure if `fail_hard` is false.
-/// When `fallback_stdout` is true, emit the text to stdout if clipboard access fails.
+/// Returns true when the clipboard copy succeeds.
 pub fn copy_to_clipboard(
     text: &str,
     fail_hard: bool,
-    fallback_stdout: bool,
-) -> Result<()> {
-    if let Err(err) = try_copy(text) {
-        if fail_hard {
-            return Err(err);
-        }
-        if fallback_stdout {
-            tracing::warn!(
-                "WARNING: clipboard unavailable ({err}); writing snippet to stdout instead."
-            );
-            print!("{text}");
-        } else {
-            tracing::warn!("WARNING: clipboard unavailable: {err}");
+) -> Result<bool> {
+    match try_copy(text) {
+        Ok(()) => Ok(true),
+        Err(err) => {
+            if fail_hard {
+                return Err(anyhow!(
+                    "clipboard unavailable ({err}); re-run with --stdout or --no-clipboard"
+                ));
+            }
+            tracing::warn!("clipboard unavailable: {err}");
+            Ok(false)
         }
     }
-    Ok(())
 }

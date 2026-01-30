@@ -71,3 +71,59 @@ fn chunk_index_out_of_range_errors() {
         .failure()
         .code(3);
 }
+
+#[test]
+fn stream_requires_chunk_size() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    dir.child("foo.txt").write_str("hello world").unwrap();
+
+    assert_cmd::cargo::cargo_bin_cmd!("context-gather")
+        .current_dir(&dir)
+        .args(["--stream", "--stdout", "--no-clipboard", "foo.txt"])
+        .assert()
+        .failure()
+        .code(2);
+}
+
+#[test]
+fn stream_conflicts_with_multi_step() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    dir.child("foo.txt").write_str("hello world").unwrap();
+
+    assert_cmd::cargo::cargo_bin_cmd!("context-gather")
+        .current_dir(&dir)
+        .args([
+            "--stream",
+            "--chunk-size",
+            "10",
+            "--multi-step",
+            "--stdout",
+            "--no-clipboard",
+            "foo.txt",
+        ])
+        .assert()
+        .failure()
+        .code(2);
+}
+
+#[test]
+fn stream_conflicts_with_chunk_index() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    dir.child("foo.txt").write_str("hello world").unwrap();
+
+    assert_cmd::cargo::cargo_bin_cmd!("context-gather")
+        .current_dir(&dir)
+        .args([
+            "--stream",
+            "--chunk-size",
+            "10",
+            "--chunk-index",
+            "0",
+            "--stdout",
+            "--no-clipboard",
+            "foo.txt",
+        ])
+        .assert()
+        .failure()
+        .code(2);
+}

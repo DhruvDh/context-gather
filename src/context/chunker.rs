@@ -14,7 +14,7 @@ pub struct FileMeta {
     pub parts: usize,
 }
 
-/// Represents one chunk of XML-ish output
+/// Represents one chunk body (file-contents blocks only; wrappers are added later).
 pub struct Chunk {
     pub index: usize,
     pub xml: String,
@@ -64,11 +64,22 @@ fn wrap_file(
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_default();
     let path_str = path.to_slash_lossy().to_string();
+    let folder = path
+        .parent()
+        .unwrap_or_else(|| Path::new(""))
+        .to_slash_lossy()
+        .to_string();
+    let folder_display = if folder.is_empty() {
+        ".".to_string()
+    } else {
+        folder
+    };
     let path_attr = maybe_escape_attr(&path_str, escape_xml);
     let filename_attr = maybe_escape_attr(&filename, escape_xml);
+    let folder_attr = maybe_escape_attr(&folder_display, escape_xml);
     format!(
-        "    <file-contents path=\"{}\" name=\"{}\">\n{}\n    </file-contents>\n",
-        path_attr, filename_attr, body
+        "    <file-contents path=\"{}\" name=\"{}\" folder=\"{}\">\n{}\n    </file-contents>\n",
+        path_attr, filename_attr, folder_attr, body
     )
 }
 
@@ -85,11 +96,22 @@ fn wrap_part(
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_default();
     let path_str = path.to_slash_lossy().to_string();
+    let folder = path
+        .parent()
+        .unwrap_or_else(|| Path::new(""))
+        .to_slash_lossy()
+        .to_string();
+    let folder_display = if folder.is_empty() {
+        ".".to_string()
+    } else {
+        folder
+    };
     let path_attr = maybe_escape_attr(&path_str, escape_xml);
     let filename_attr = maybe_escape_attr(&filename, escape_xml);
+    let folder_attr = maybe_escape_attr(&folder_display, escape_xml);
     format!(
-        "    <file-contents path=\"{}\" name=\"{}\" part=\"{}/{}\">\n{}    </file-contents>\n",
-        path_attr, filename_attr, idx, total, body
+        "    <file-contents path=\"{}\" name=\"{}\" folder=\"{}\" part=\"{}/{}\">\n{}    </file-contents>\n",
+        path_attr, filename_attr, folder_attr, idx, total, body
     )
 }
 
@@ -161,21 +183,16 @@ fn split_file_into_parts(
         .map(|line| format!("{line}\n"))
         .collect();
     let mut target_parts = 1usize;
-    let mut last_parts = None;
-    for _ in 0..8 {
-        let parts = split_with_total(&lines, path, max_tokens, escape_xml, target_parts);
+    let mut parts = Vec::new();
+    for _ in 0..16 {
+        parts = split_with_total(&lines, path, max_tokens, escape_xml, target_parts);
         let actual = parts.len().max(1);
         if actual == target_parts {
             return parts;
         }
-        if Some(actual) == last_parts {
-            let target = actual.max(target_parts);
-            return split_with_total(&lines, path, max_tokens, escape_xml, target);
-        }
-        last_parts = Some(target_parts);
         target_parts = actual;
     }
-    split_with_total(&lines, path, max_tokens, escape_xml, target_parts)
+    parts
 }
 
 /// Builds chunk bodies and metadata for header

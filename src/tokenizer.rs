@@ -15,15 +15,19 @@ fn normalize_model_name(model: &str) -> String {
         .collect()
 }
 
-fn bpe_for_model(model: &str) -> CoreBPE {
+fn try_bpe_for_model(model: &str) -> Result<CoreBPE> {
     let normalized = normalize_model_name(model);
     if let Ok(bpe) = get_bpe_from_model(&normalized) {
-        return bpe;
+        return Ok(bpe);
     }
     if normalized.starts_with("gpt-5") {
-        return o200k_base().expect("tokenizer init failed");
+        return o200k_base().map_err(|e| anyhow!("tokenizer init failed: {e}"));
     }
-    o200k_base().expect("tokenizer init failed")
+    o200k_base().map_err(|e| anyhow!("tokenizer init failed: {e}"))
+}
+
+fn bpe_for_model_or_panic(model: &str) -> CoreBPE {
+    try_bpe_for_model(model).expect("tokenizer init failed")
 }
 
 static TOK: OnceLock<CoreBPE> = OnceLock::new();
@@ -33,7 +37,7 @@ static TOK: OnceLock<CoreBPE> = OnceLock::new();
 pub fn count(text: &str) -> usize {
     let tok = TOK.get_or_init(|| {
         let model = std::env::var("CG_TOKENIZER_MODEL").unwrap_or_else(|_| DEFAULT_MODEL.into());
-        bpe_for_model(&model)
+        bpe_for_model_or_panic(&model)
     });
     tok.encode_with_special_tokens(text).len()
 }
@@ -47,7 +51,7 @@ pub fn init(model: Option<&str>) -> Result<()> {
         .map(normalize_model_name)
         .or_else(|| std::env::var("CG_TOKENIZER_MODEL").ok())
         .unwrap_or_else(|| DEFAULT_MODEL.to_string());
-    TOK.set(bpe_for_model(&model))
+    TOK.set(try_bpe_for_model(&model)?)
         .map_err(|_| anyhow!("tokenizer already initialized"))?;
     Ok(())
 }

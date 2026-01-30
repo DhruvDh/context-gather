@@ -28,11 +28,13 @@ fn split_across_two_chunks() {
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_default();
+    let folder = ".";
     let contents = "x\n".repeat(200);
     let file_block = format!(
-        "    <file-contents path=\"{}\" name=\"{}\">\n{}\n    </file-contents>\n",
+        "    <file-contents path=\"{}\" name=\"{}\" folder=\"{}\">\n{}\n    </file-contents>\n",
         path.display(),
         name,
+        folder,
         contents
     );
     let file_tok = count_tokens(&file_block);

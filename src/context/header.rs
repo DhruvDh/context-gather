@@ -28,17 +28,24 @@ pub fn make_header(
         );
     }
     // Build instructions section
+    let escape_note = if escape_xml {
+        "    File contents are XML-escaped; angle brackets and ampersands are encoded.\n"
+    } else {
+        "    File contents are unescaped; header metadata remains escaped.\n"
+    };
     let instructions = if multi_step {
         // Multi-step mode instructions
         format!(
-            "  <instructions>\n    This header lists {total_files} files available for context retrieval. To fetch file contents, enter one or more file ids (e.g., '2'), file paths (e.g., 'src/main.rs'), or glob patterns (e.g., '*.rs'), and the tool will return their contents in the next message.\n  </instructions>\n",
+            "  <instructions>\n    This header lists {total_files} files available for context retrieval. To fetch file contents, enter a file id (e.g., '2'), a file path (e.g., 'src/main.rs'), or a glob pattern (e.g., '*.rs'); glob patterns may match multiple files, and the tool will return those contents in the next message.\n{escape_note}  </instructions>\n",
             total_files = files.len(),
+            escape_note = escape_note
         )
     } else {
         // Chunked mode instructions
         format!(
-            "  <instructions>\n    The shared context is split into {total_chunks} chunks (including this header). Review each chunk carefully. Acknowledge that you've studied this each chunk. After reading the final chunk, reply \"READY\" to confirm you have understood the context.\n  </instructions>\n",
+            "  <instructions>\n    The shared context is split into {total_chunks} chunks (including this header). Review each chunk carefully. Acknowledge that you've studied this each chunk. After reading the final chunk, reply \"READY\" to confirm you have understood the context.\n{escape_note}  </instructions>\n",
             total_chunks = total_chunks,
+            escape_note = escape_note
         )
     };
     // Gather git info: branch, recent commits, and diff
@@ -91,7 +98,7 @@ pub fn make_header(
                 let branch_attr = maybe_escape_attr(&branch, escape_xml);
                 let _ = writeln!(&mut git_info, "  <git-info branch=\"{}\">", branch_attr);
                 for msg in commits {
-                    let msg_text = maybe_escape_text(&msg, escape_xml);
+                    let msg_text = maybe_escape_text(&msg, true);
                     let _ = writeln!(&mut git_info, "    <commit>{}</commit>", msg_text);
                 }
                 let _ = writeln!(&mut git_info, "  </git-info>");
@@ -123,7 +130,7 @@ pub fn make_header(
                     "  <changed-files diffed-against=\"origin/main\">"
                 );
                 for file in &changed {
-                    let file_text = maybe_escape_text(file, escape_xml);
+                    let file_text = maybe_escape_text(file, true);
                     let _ = writeln!(&mut diff_xml, "    <file>{}</file>", file_text);
                 }
                 let _ = writeln!(&mut diff_xml, "  </changed-files>");

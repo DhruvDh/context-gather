@@ -361,7 +361,7 @@ fn escape_special_chars(s: &str) -> String {
 }
 ```
 
-Note that escaping may be helpful if you want to ensure valid XML. You can skip it if it's purely for an LLM "context" use case and you're confident the LLM can handle angle brackets. Use `--escape-xml` to enable content escaping (attributes are always escaped when needed).
+Note that escaping is now off by default. Use `--escape-xml` to enable content escaping (attributes are always escaped when needed).
 
 ## 8. Clipboard Integration (in `clipboard.rs`)
 
@@ -371,24 +371,24 @@ Using [`cli-clipboard`](https://crates.io/crates/cli-clipboard) for Wayland-safe
 use anyhow::{Result, anyhow};
 use cli_clipboard::{ClipboardContext, ClipboardProvider};
 
-/// `fallback_stdout` lets the caller decide whether to emit the text when clipboard access fails.
-pub fn copy_to_clipboard(text: &str, fail_hard: bool, fallback_stdout: bool) -> Result<()> {
+/// Returns true when the clipboard copy succeeds.
+pub fn copy_to_clipboard(text: &str, fail_hard: bool) -> Result<bool> {
     let mut ctx = ClipboardContext::new().map_err(|e| anyhow!("init clipboard: {e}"))?;
-    if let Err(err) = ctx
+    match ctx
         .set_contents(text.to_owned())
         .map_err(|e| anyhow!("set clipboard contents: {e}"))
     {
-        if fail_hard {
-            return Err(err);
-        }
-        if fallback_stdout {
-            eprintln!("clipboard unavailable ({err}); writing to stdout instead");
-            print!("{text}");
-        } else {
+        Ok(()) => Ok(true),
+        Err(err) => {
+            if fail_hard {
+                return Err(anyhow!(
+                    "clipboard unavailable ({err}); re-run with --stdout or --no-clipboard"
+                ));
+            }
             eprintln!("clipboard unavailable: {err}");
+            Ok(false)
         }
     }
-    Ok(())
 }
 ```
 
@@ -410,13 +410,28 @@ By default (without `--interactive`), it just does steps 1, 2, 4–8 and finishe
 ## Usage Examples
 
 Note: when `--stdout` is set, XML is written to stdout and human-readable summaries/warnings go to stderr.
+If `--stdout` is not set and clipboard copy fails, the command exits with an error; re-run with
+`--stdout` or `--no-clipboard`.
 
 Exclude patterns and multi-step globs are matched against paths relative to the current working directory. Use `**` to match across directories (e.g., `**/*.rs`).
+By default, file contents are unescaped; use `--escape-xml` for escaped output.
 
-# Interactive chunk streaming with prompt (cycles through chunks and copies to clipboard)
+# Interactive selection + chunk streaming (alias: -i)
 
 ```bash
 context-gather -i -c 39000
+```
+
+# TUI selection only, then emit all chunks non-interactively
+
+```bash
+context-gather --select -c 39000 --stdout .
+```
+
+# Stream chunks without the selection TUI
+
+```bash
+context-gather --stream -c 39000 .
 ```
 
 # Non-interactive: copy or print a specific chunk

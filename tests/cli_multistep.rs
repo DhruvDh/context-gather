@@ -8,7 +8,7 @@ fn multi_step_without_stdout_is_quiet() {
 
     // Run with multi-step only, without --stdout: should not print header snippet
     let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("context-gather");
-    cmd.current_dir(&dir).args(["-m", "."]); // multi-step mode
+    cmd.current_dir(&dir).args(["-m", "--no-clipboard", "."]); // multi-step mode
     // Send 'q' to exit REPL immediately
     cmd.write_stdin("q\n")
         .assert()

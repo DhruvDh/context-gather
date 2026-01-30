@@ -21,9 +21,23 @@ pub struct Cli {
     #[arg(default_value = ".", num_args(1..))]
     pub paths: Vec<String>,
 
-    /// Open interactive TUI for file selection and chunk browsing (use with -c or -m for chunked/multi-step UIs).
+    /// Open interactive TUI for file selection; with --chunk-size, also stream chunks (alias for --select + --stream).
     #[arg(short = 'i', long = "interactive", default_value_t = false)]
     pub interactive: bool,
+
+    /// Open the file-selection TUI only.
+    #[arg(long = "select", default_value_t = false)]
+    pub select: bool,
+
+    /// After chunking, open the chunk streaming REPL (requires --chunk-size).
+    #[arg(
+        long = "stream",
+        default_value_t = false,
+        requires = "chunk_size",
+        conflicts_with = "multi_step",
+        conflicts_with = "chunk_index"
+    )]
+    pub stream: bool,
 
     /// Do not copy to clipboard.
     #[arg(short = 'n', long = "no-clipboard", default_value_t = false)]
@@ -61,11 +75,17 @@ pub struct Cli {
     #[arg(short = 'c', long = "chunk-size")]
     pub chunk_size: Option<usize>,
 
-    /// Which chunk to copy (0-based); -1 means none.
-    #[arg(short = 'k', long = "chunk-index", value_parser = parse_chunk_index, requires = "chunk_size")]
+    /// Which chunk to copy/print (0-based); -1 means none.
+    #[arg(
+        short = 'k',
+        long = "chunk-index",
+        value_parser = parse_chunk_index,
+        requires = "chunk_size",
+        allow_hyphen_values = true
+    )]
     pub chunk_index: Option<isize>,
 
-    /// Enable multi-step mode: copy only header initially; then serve files on demand (use -i for TUI file picker).
+    /// Enable multi-step mode: copy only header initially; then serve files on demand (use --select or -i for TUI).
     #[arg(short = 'm', long = "multi-step", conflicts_with = "chunk_size")]
     pub multi_step: bool,
 
@@ -73,7 +93,7 @@ pub struct Cli {
     #[arg(long = "git-info", default_value_t = false)]
     pub git_info: bool,
 
-    /// Escape XML special characters in content (attributes are always escaped when needed).
+    /// Escape XML special characters in content (default: off; attributes are always escaped when needed).
     #[arg(long = "escape-xml", default_value_t = false)]
     pub escape_xml: bool,
 }

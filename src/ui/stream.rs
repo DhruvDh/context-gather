@@ -1,9 +1,8 @@
-use crate::chunker::Chunk;
 use crate::config::Config;
 use crate::context::types::FileContents;
 use crate::context::xml::{maybe_escape_attr, maybe_escape_text};
 use crate::io::clipboard;
-use crate::output;
+use crate::output::RenderedChunk;
 use anyhow::Result;
 use globset::{Glob, GlobSetBuilder};
 use path_slash::PathBufExt;
@@ -11,7 +10,7 @@ use std::io::{self, Write};
 
 /// Multi-step mode: initial header then REPL for fetching files by id or glob.
 pub fn multi_step_mode(
-    chunks: &[Chunk],
+    chunks: &[RenderedChunk],
     file_data: &[FileContents],
     config: &Config,
 ) -> Result<()> {
@@ -22,7 +21,10 @@ pub fn multi_step_mode(
         print!("{}", snippet);
     }
     if !config.no_clipboard {
-        clipboard::copy_to_clipboard(snippet, false, false)?;
+        let copied = clipboard::copy_to_clipboard(snippet, !config.stdout)?;
+        if copied {
+            eprintln!("Copied header");
+        }
     }
     // Display REPL instructions
     eprintln!("Commands: enter file ids, file paths, or glob patterns; type 'q' to quit.");
@@ -52,7 +54,13 @@ pub fn multi_step_mode(
         } else if let Ok(glob) = Glob::new(&cmd.replace('\\', "/")) {
             let mut builder = GlobSetBuilder::new();
             builder.add(glob);
-            let matcher = builder.build().unwrap();
+            let matcher = match builder.build() {
+                Ok(matcher) => matcher,
+                Err(e) => {
+                    eprintln!("Invalid request: {}", e);
+                    continue;
+                }
+            };
             for (i, fc) in file_data.iter().enumerate() {
                 if matcher.is_match(fc.path.to_slash_lossy().as_ref()) {
                     selected.push(i);
@@ -70,27 +78,33 @@ pub fn multi_step_mode(
         for &id in &selected {
             let fc = &file_data[id];
             let path = fc.path.to_slash_lossy().to_string();
+            let folder = fc.folder.to_slash_lossy().to_string();
+            let folder_display = if folder.is_empty() { "." } else { &folder };
             let name = fc
                 .path
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_default();
             let path_attr = maybe_escape_attr(&path, config.escape_xml);
+            let folder_attr = maybe_escape_attr(folder_display, config.escape_xml);
             let name_attr = maybe_escape_attr(&name, config.escape_xml);
             let contents = maybe_escape_text(&fc.contents, config.escape_xml);
             let out = format!(
-                "<file-contents id=\"{id}\" path=\"{path}\" name=\"{name}\">\n{contents}\n</file-contents>\n",
+                "<file-contents id=\"{id}\" path=\"{path}\" name=\"{name}\" folder=\"{folder}\">\n{contents}\n</file-contents>\n",
                 id = id,
                 path = path_attr,
                 name = name_attr,
+                folder = folder_attr,
                 contents = contents
             );
             if config.stdout {
                 print!("{}", out);
             }
             if !config.no_clipboard {
-                clipboard::copy_to_clipboard(&out, false, !config.stdout)?;
-                eprintln!("Copied file id {}", id);
+                let copied = clipboard::copy_to_clipboard(&out, !config.stdout)?;
+                if copied {
+                    eprintln!("Copied file id {}", id);
+                }
             }
         }
     }
@@ -99,7 +113,7 @@ pub fn multi_step_mode(
 
 /// Interactive streaming mode: REPL for browsing and copying context chunks.
 pub fn streaming_mode(
-    chunks: &[Chunk],
+    chunks: &[RenderedChunk],
     config: &Config,
 ) -> Result<()> {
     let total = chunks.len();
@@ -108,13 +122,15 @@ pub fn streaming_mode(
     // Display REPL instructions
     eprintln!("Commands: press Enter for next chunk, number to jump, or 'q' to quit.");
     loop {
-        let snippet = output::format_chunk_snippet(chunks, idx);
+        let snippet = &chunks[idx].xml;
         if config.stdout {
             print!("{}", snippet);
         }
         if !config.no_clipboard {
-            clipboard::copy_to_clipboard(&snippet, false, !config.stdout)?;
-            eprintln!("Copied chunk {idx}");
+            let copied = clipboard::copy_to_clipboard(snippet, !config.stdout)?;
+            if copied {
+                eprintln!("Copied chunk {idx}");
+            }
         }
         {
             let mut ui = io::stderr();
@@ -127,11 +143,18 @@ pub fn streaming_mode(
         if cmd.eq_ignore_ascii_case("q") {
             break;
         }
-        idx = if cmd.is_empty() {
-            (idx + 1) % total
-        } else {
-            cmd.parse().unwrap_or(idx)
-        };
+        if cmd.is_empty() {
+            idx = (idx + 1) % total;
+            continue;
+        }
+        match cmd.parse::<usize>() {
+            Ok(n) if n < total => idx = n,
+            Ok(_) => eprintln!(
+                "Chunk out of range; valid range is 0..{}",
+                total.saturating_sub(1)
+            ),
+            Err(_) => eprintln!("Invalid input: {}", cmd),
+        }
     }
     Ok(())
 }

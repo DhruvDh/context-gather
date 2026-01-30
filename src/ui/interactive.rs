@@ -1,5 +1,6 @@
 use std::io::{self, IsTerminal};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{panic, path::PathBuf};
 
 use crate::ui::{tui_events, tui_render, tui_state};
@@ -48,6 +49,18 @@ impl<B: Backend> Drop for TerminalGuard<B> {
     }
 }
 
+static WRAPPER_HOOK_RAN: AtomicBool = AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn test_clear_wrapper_hook_flag() {
+    WRAPPER_HOOK_RAN.store(false, Ordering::SeqCst);
+}
+
+#[doc(hidden)]
+pub fn test_wrapper_hook_ran() -> bool {
+    WRAPPER_HOOK_RAN.load(Ordering::SeqCst)
+}
+
 /// Clean up terminal state: disable raw mode, exit alternate screen, disable mouse capture, and show cursor.
 fn cleanup_terminal<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
     disable_raw_mode()?;
@@ -62,13 +75,6 @@ pub fn select_files_tui(
     paths: Vec<PathBuf>,
     preselected: &[PathBuf],
 ) -> Result<Vec<PathBuf>> {
-    // Ensure we have a TTY to render against; stderr stays attached when stdout is piped.
-    if !io::stderr().is_terminal() {
-        return Err(anyhow!(
-            "interactive mode requires an attached terminal (stderr is not a TTY)"
-        ));
-    }
-
     // Install panic hook to restore terminal on panic
     let default_hook = panic::take_hook();
     let default_hook: Arc<dyn Fn(&panic::PanicHookInfo<'_>) + Send + Sync + 'static> =
@@ -79,6 +85,7 @@ pub fn select_files_tui(
     panic::set_hook(Box::new({
         let dh = default_hook.clone();
         move |info| {
+            WRAPPER_HOOK_RAN.store(true, Ordering::SeqCst);
             let _ = disable_raw_mode();
             let _ = execute!(io::stderr(), LeaveAlternateScreen, DisableMouseCapture);
             (dh)(info);
@@ -88,6 +95,13 @@ pub fn select_files_tui(
     // If running under tests with CG_TEST_AUTOQUIT set, skip TUI loop
     if std::env::var_os("CG_TEST_AUTOQUIT").is_some() {
         return Ok(paths);
+    }
+
+    // Ensure we have a TTY to render against; stderr stays attached when stdout is piped.
+    if !io::stderr().is_terminal() {
+        return Err(anyhow!(
+            "interactive mode requires an attached terminal (stderr is not a TTY)"
+        ));
     }
 
     // Initialize state

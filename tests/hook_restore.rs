@@ -1,6 +1,7 @@
 use std::panic;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use context_gather::ui::interactive::{test_clear_wrapper_hook_flag, test_wrapper_hook_ran};
 use context_gather::ui::select_files_tui;
 
 static HOOK_CALLED: AtomicBool = AtomicBool::new(false);
@@ -22,11 +23,16 @@ fn tui_restores_panic_hook() {
     unsafe {
         std::env::remove_var("CG_TEST_AUTOQUIT");
     }
+    test_clear_wrapper_hook_flag();
 
     // Trigger a panic and swallow it
     let _ = panic::catch_unwind(|| panic!("boom"));
 
     assert!(HOOK_CALLED.load(Ordering::SeqCst));
+    assert!(
+        !test_wrapper_hook_ran(),
+        "wrapper hook ran after select_files_tui returned"
+    );
 
     // Restore original hook for cleanliness
     panic::set_hook(orig);

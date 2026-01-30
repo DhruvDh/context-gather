@@ -1,7 +1,6 @@
 // Import modules from the library crate
-use context_gather::config::Config;
+use context_gather::config::{ChunkCopy, Config};
 use context_gather::io::clipboard;
-use context_gather::output;
 use context_gather::pipeline::{InvalidExcludePatterns, Pipeline};
 use context_gather::ui::select_files_tui;
 use context_gather::ui::stream::{multi_step_mode, streaming_mode};
@@ -48,8 +47,8 @@ fn main() -> Result<()> {
 
     pipeline.compute_preselected();
 
-    // 3) If interactive, open the TUI
-    if config.interactive {
+    // 3) If selection UI requested, open the TUI
+    if config.select {
         let selected = match select_files_tui(
             pipeline.candidate_files().to_vec(),
             pipeline.preselected_paths(),
@@ -81,49 +80,53 @@ fn main() -> Result<()> {
 
     // Multi-step mode: REPL for fetching files on demand
     if config.multi_step {
-        multi_step_mode(pipeline.chunks(), pipeline.file_data(), &config)?;
+        multi_step_mode(pipeline.rendered_chunks(), pipeline.file_data(), &config)?;
         return Ok(());
     }
 
-    // Chunked mode interactive REPL: only when interactive flag is set
-    if chunk_limit > 0 && config.interactive {
-        streaming_mode(pipeline.chunks(), &config)?;
+    // Chunked mode interactive REPL: only when streaming is requested
+    if chunk_limit > 0 && config.stream {
+        streaming_mode(pipeline.rendered_chunks(), &config)?;
         return Ok(());
     }
 
-    // If chunking disabled (-c 0), output full XML as a single chunk
+    // If chunking disabled (no --chunk-size), output full XML as a single chunk
     if chunk_limit == 0 {
         let xml_output = pipeline
             .xml_output()
             .expect("xml output should be built when chunking is disabled");
         // Print XML on stdout if requested
         if config.stdout {
-            println!("{xml_output}");
+            print!("{xml_output}");
         }
         // Copy to clipboard
+        let mut copied_idx: Option<usize> = None;
         if !config.no_clipboard {
-            clipboard::copy_to_clipboard(xml_output, false, !config.stdout)?;
+            let copied = clipboard::copy_to_clipboard(xml_output, !config.stdout)?;
+            if copied {
+                copied_idx = Some(0);
+            }
         }
         // Summary: one chunk (index 0)
-        let token_count = if config.model_context.is_some() {
-            Some(gather::count_tokens(xml_output))
-        } else {
-            None
-        };
-        let summary = if config.stdout && config.no_clipboard && token_count.is_none() {
-            // Skip tokenisation for pure stdout + no-clipboard runs when no model_context
-            format!(
-                "OK {} files • 1 chunk • copied={}",
-                pipeline.file_data().len(),
-                if !config.no_clipboard { "0" } else { "none" }
-            )
-        } else {
-            format!(
+        let token_count = config
+            .model_context
+            .map(|_| gather::count_tokens(xml_output));
+        let summary = match token_count {
+            Some(tokens) => format!(
                 "OK {} files • {} tokens • 1 chunk • copied={}",
                 pipeline.file_data().len(),
-                token_count.unwrap_or_else(|| gather::count_tokens(xml_output)),
-                if !config.no_clipboard { "0" } else { "none" }
-            )
+                tokens,
+                copied_idx
+                    .map(|idx| idx.to_string())
+                    .unwrap_or_else(|| "none".into())
+            ),
+            None => format!(
+                "OK {} files • 1 chunk • copied={}",
+                pipeline.file_data().len(),
+                copied_idx
+                    .map(|idx| idx.to_string())
+                    .unwrap_or_else(|| "none".into())
+            ),
         };
         eprintln!("{summary}");
         if let (Some(limit), Some(total_token_count)) = (config.model_context, token_count)
@@ -138,32 +141,68 @@ fn main() -> Result<()> {
     }
 
     // Determine default copy index: default to first chunk when unset and clipboard enabled
-    let chunks = pipeline.chunks();
-    if let Some(idx) = config.chunk_index
-        && idx >= chunks.len()
+    let chunks = pipeline.rendered_chunks();
+    let total_chunks = chunks.len();
+    if let ChunkCopy::Index(idx) = config.chunk_copy
+        && idx >= total_chunks
     {
         warn!(
             "--chunk-index {} out of range (0..{})",
             idx,
-            chunks.len().saturating_sub(1)
+            total_chunks.saturating_sub(1)
         );
         std::process::exit(3);
     }
     let copy_idx = if config.no_clipboard {
         None
     } else {
-        config.chunk_index.or(Some(0))
-    };
-    // Non-interactive: handle selected chunk or print all
-    // Non-interactive: for each chunk, print and/or copy full XML snippet
-    let total_chunks = chunks.len();
-    for i in 0..total_chunks {
-        let snippet = output::format_chunk_snippet(chunks, i);
-        if config.stdout {
-            print!("{snippet}");
+        match config.chunk_copy {
+            ChunkCopy::Default => Some(0),
+            ChunkCopy::Index(idx) => Some(idx),
+            ChunkCopy::None => None,
         }
-        if copy_idx == Some(i) && !config.no_clipboard {
-            clipboard::copy_to_clipboard(&snippet, false, !config.stdout)?;
+    };
+    let mut copied_idx: Option<usize> = None;
+    // Non-interactive: print/copy requested chunk(s)
+    if config.stdout {
+        match config.chunk_copy {
+            ChunkCopy::Default => {
+                for (i, chunk) in chunks.iter().take(total_chunks).enumerate() {
+                    let snippet = chunk.xml.as_str();
+                    print!("{snippet}");
+                    if copy_idx == Some(i) && !config.no_clipboard {
+                        let copied = clipboard::copy_to_clipboard(snippet, !config.stdout)?;
+                        if copied {
+                            copied_idx = Some(i);
+                        }
+                    }
+                }
+            }
+            ChunkCopy::Index(idx) => {
+                let snippet = chunks[idx].xml.as_str();
+                print!("{snippet}");
+                if copy_idx == Some(idx) && !config.no_clipboard {
+                    let copied = clipboard::copy_to_clipboard(snippet, !config.stdout)?;
+                    if copied {
+                        copied_idx = Some(idx);
+                    }
+                }
+            }
+            ChunkCopy::None => {
+                if let Some(idx) = copy_idx {
+                    let snippet = chunks[idx].xml.as_str();
+                    let copied = clipboard::copy_to_clipboard(snippet, !config.stdout)?;
+                    if copied {
+                        copied_idx = Some(idx);
+                    }
+                }
+            }
+        }
+    } else if let Some(idx) = copy_idx {
+        let snippet = chunks[idx].xml.as_str();
+        let copied = clipboard::copy_to_clipboard(snippet, !config.stdout)?;
+        if copied {
+            copied_idx = Some(idx);
         }
     }
     // 8) Summary
@@ -174,7 +213,7 @@ fn main() -> Result<()> {
             pipeline.file_data().len(),
             total_token_count,
             total_chunks,
-            copy_idx
+            copied_idx
                 .map(|idx| idx.to_string())
                 .unwrap_or_else(|| "none".into())
         );
@@ -183,7 +222,7 @@ fn main() -> Result<()> {
             "OK {} files • {} chunks • copied={}",
             pipeline.file_data().len(),
             total_chunks,
-            copy_idx
+            copied_idx
                 .map(|idx| idx.to_string())
                 .unwrap_or_else(|| "none".into())
         );

@@ -1,8 +1,8 @@
-use crate::chunker::{self, Chunk, FileMeta};
+use crate::chunker;
 use crate::context::gather;
 use crate::context::types::FileContents;
 use crate::header;
-use crate::output;
+use crate::output::{self, RenderedChunk};
 use crate::xml_output;
 use anyhow::{Result, anyhow};
 use globset::{Glob, GlobSetBuilder};
@@ -40,8 +40,7 @@ pub struct Pipeline {
     preselected_paths: Vec<PathBuf>,
     file_data: Vec<FileContents>,
     xml_output: Option<String>,
-    chunks: Vec<Chunk>,
-    metas: Vec<FileMeta>,
+    rendered_chunks: Vec<RenderedChunk>,
 }
 
 impl Pipeline {
@@ -126,12 +125,8 @@ impl Pipeline {
         self.xml_output.as_deref()
     }
 
-    pub fn chunks(&self) -> &[Chunk] {
-        &self.chunks
-    }
-
-    pub fn metas(&self) -> &[FileMeta] {
-        &self.metas
+    pub fn rendered_chunks(&self) -> &[RenderedChunk] {
+        &self.rendered_chunks
     }
 
     /// Apply exclude patterns to candidate files.
@@ -143,9 +138,14 @@ impl Pipeline {
         let mut builder = GlobSetBuilder::new();
         let mut valid = 0usize;
         for pattern in &raw_patterns {
-            if let Ok(glob) = Glob::new(pattern) {
-                builder.add(glob);
-                valid += 1;
+            match Glob::new(pattern) {
+                Ok(glob) => {
+                    builder.add(glob);
+                    valid += 1;
+                }
+                Err(err) => {
+                    warn!("invalid --exclude-paths pattern: {pattern} ({err})");
+                }
             }
         }
         if !raw_patterns.is_empty() && valid == 0 {
@@ -206,12 +206,10 @@ impl Pipeline {
                 header::make_header(1, chunk_limit, &metas, multi_step, escape_xml, include_git,)
             );
             let header_tokens = gather::count_tokens(&header_xml);
-            self.chunks = vec![Chunk {
-                index: 0,
+            self.rendered_chunks = vec![RenderedChunk {
                 tokens: header_tokens,
                 xml: header_xml,
             }];
-            self.metas = metas;
             return Ok(());
         }
 
@@ -235,29 +233,33 @@ impl Pipeline {
                         include_git,
                     )
                 );
-                let mut chunks = Vec::with_capacity(total_chunks);
-                chunks.push(Chunk {
-                    index: 0,
-                    tokens: 0,
-                    xml: header_xml,
-                });
-                for (i, body) in bodies.iter().enumerate() {
-                    let xml: String = body.blocks.iter().map(|b| b.xml.as_str()).collect();
-                    chunks.push(Chunk {
-                        index: i + 1,
-                        tokens: body.tokens,
-                        xml,
-                    });
-                }
-
-                let mut snippet_tokens = Vec::with_capacity(chunks.len());
+                let wrapper_floor = if chunk_limit > 0 {
+                    let last_id = total_chunks.saturating_sub(1);
+                    let wrapper = format!(
+                        "<context-chunk id=\"{}/{}\">\n</context-chunk>\n</shared-context>\n",
+                        last_id, total_chunks
+                    );
+                    let wrapper_tokens = gather::count_tokens(&wrapper);
+                    chunk_limit.saturating_sub(wrapper_tokens.saturating_add(2))
+                } else {
+                    0
+                };
+                let body_xmls: Vec<String> = bodies
+                    .iter()
+                    .map(|body| body.blocks.iter().map(|b| b.xml.as_str()).collect())
+                    .collect();
+                let mut snippet_tokens = Vec::with_capacity(total_chunks);
+                let mut snippet_xmls = Vec::with_capacity(total_chunks);
                 let mut split_body_idx = None;
                 let mut oversize_single = Vec::new();
                 let mut required_limit: Option<usize> = None;
-                for idx in 0..chunks.len() {
-                    let snippet = output::format_chunk_snippet(&chunks, idx);
+                let mut max_over_limit = 0usize;
+                let mut has_unavoidable = false;
+                for idx in 0..total_chunks {
+                    let snippet = output::render_chunk_snippet(&header_xml, &body_xmls, idx);
                     let tokens = gather::count_tokens(&snippet);
                     snippet_tokens.push(tokens);
+                    snippet_xmls.push(snippet);
                     if chunk_limit > 0 && tokens > chunk_limit {
                         if idx == 0 {
                             header_oversize = true;
@@ -269,13 +271,18 @@ impl Pipeline {
                             } else {
                                 oversize_single.push(idx);
                                 let block_tokens = bodies[body_idx].blocks[0].tokens;
+                                if block_tokens > chunk_limit {
+                                    has_unavoidable = true;
+                                    continue;
+                                }
                                 let overhead = tokens.saturating_sub(block_tokens);
-                                let limit = chunk_limit.saturating_sub(overhead);
+                                let limit = chunk_limit.saturating_sub(overhead).max(wrapper_floor);
                                 required_limit = Some(match required_limit {
                                     Some(prev) => prev.min(limit),
                                     None => limit,
                                 });
                             }
+                            max_over_limit = max_over_limit.max(tokens.saturating_sub(chunk_limit));
                         }
                     }
                 }
@@ -306,7 +313,19 @@ impl Pipeline {
                     && limit > 0
                     && limit < effective_limit
                 {
+                    let adjusted = limit.saturating_sub(2).max(1);
+                    if adjusted < effective_limit {
+                        effective_limit = adjusted;
+                        break;
+                    }
                     effective_limit = limit;
+                    break;
+                }
+                if max_over_limit > 0
+                    && !has_unavoidable
+                    && effective_limit > wrapper_floor.saturating_add(1)
+                {
+                    effective_limit = effective_limit.saturating_sub(1).max(wrapper_floor);
                     break;
                 }
 
@@ -323,11 +342,11 @@ impl Pipeline {
                     );
                 }
 
-                for (idx, tokens) in snippet_tokens.into_iter().enumerate() {
-                    chunks[idx].tokens = tokens;
-                }
-                self.chunks = chunks;
-                self.metas = metas;
+                self.rendered_chunks = snippet_xmls
+                    .into_iter()
+                    .zip(snippet_tokens)
+                    .map(|(xml, tokens)| RenderedChunk { xml, tokens })
+                    .collect();
                 return Ok(());
             }
             if attempt == 7 {
