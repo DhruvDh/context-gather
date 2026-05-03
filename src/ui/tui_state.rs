@@ -15,6 +15,7 @@ pub struct UiState {
     pub ext_scroll_offset: usize,
     pub reset_ext_on_toggle: bool,
     pub saved_search_input: String,
+    pub search_edit_mode: bool,
     pub selected_idx: usize,
     pub scroll_offset: usize,
 }
@@ -82,6 +83,7 @@ impl UiState {
             ext_scroll_offset: 0,
             reset_ext_on_toggle: true,
             saved_search_input: String::new(),
+            search_edit_mode: false,
             selected_idx: 0,
             scroll_offset: 0,
         }

@@ -49,6 +49,21 @@ pub(crate) fn maybe_escape_attr<'a>(
     }
 }
 
+pub(crate) fn raw_content_may_break_structure(s: &str) -> bool {
+    [
+        "</file-contents>",
+        "</context-chunk>",
+        "</folder>",
+        "</shared-context>",
+        "<file-contents",
+        "<context-chunk",
+        "<folder ",
+        "<shared-context",
+    ]
+    .iter()
+    .any(|marker| s.contains(marker))
+}
+
 /// Builds a simple XML-like structure grouping files by folder.
 pub fn build_xml(files: &[FileContents]) -> Result<String> {
     build_xml_with_escape(files, false)

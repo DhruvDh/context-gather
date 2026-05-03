@@ -1,5 +1,6 @@
 use assert_fs::prelude::*;
 use predicates::str::{contains, is_empty};
+use std::time::Duration;
 
 #[test]
 fn multi_step_without_stdout_is_quiet() {
@@ -30,4 +31,20 @@ fn multi_step_with_stdout_prints_header() {
         .success()
         .stdout(contains("<shared-context>"))
         .stderr(contains("Request file id or glob"));
+}
+
+#[test]
+fn multi_step_exits_on_stdin_eof() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    dir.child("c.txt").write_str("done").unwrap();
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("context-gather");
+    cmd.current_dir(&dir)
+        .args(["--stdout", "--no-clipboard", "-m", "."])
+        .write_stdin("")
+        .timeout(Duration::from_secs(2));
+    cmd.assert()
+        .success()
+        .stdout(contains("<shared-context>"))
+        .stderr(contains("stdin closed; leaving multi-step mode."));
 }

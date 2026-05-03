@@ -39,6 +39,7 @@ pub struct Pipeline {
     candidate_files: Vec<PathBuf>,
     preselected_paths: Vec<PathBuf>,
     file_data: Vec<FileContents>,
+    skipped_messages: Vec<String>,
     xml_output: Option<String>,
     rendered_chunks: Vec<RenderedChunk>,
 }
@@ -121,6 +122,14 @@ impl Pipeline {
         &self.file_data
     }
 
+    pub fn skipped_count(&self) -> usize {
+        self.skipped_messages.len()
+    }
+
+    pub fn skipped_messages(&self) -> &[String] {
+        &self.skipped_messages
+    }
+
     pub fn xml_output(&self) -> Option<&str> {
         self.xml_output.as_deref()
     }
@@ -175,8 +184,28 @@ impl Pipeline {
         &mut self,
         max_size: u64,
     ) -> Result<()> {
-        self.file_data = gather::collect_file_data(&self.candidate_files, max_size, &self.root)?;
+        let collection =
+            gather::collect_file_data_with_skips(&self.candidate_files, max_size, &self.root)?;
+        self.file_data = collection.files;
+        self.skipped_messages = collection.skipped;
         Ok(())
+    }
+
+    pub fn warn_raw_structure_risks(
+        &self,
+        escape_xml: bool,
+    ) {
+        if escape_xml {
+            return;
+        }
+        for file in &self.file_data {
+            if xml_output::raw_content_may_break_structure(&file.contents) {
+                warn!(
+                    "raw contents in {} contain context wrapper markers; output is XML-like, not parseable XML; use --escape-xml for escaped content",
+                    file.path.to_slash_lossy()
+                );
+            }
+        }
     }
 
     /// Build the full XML output (folder-grouped) for non-chunked mode.

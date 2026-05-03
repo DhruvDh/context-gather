@@ -2,9 +2,19 @@
 name = "context-gather"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.95"
+authors = ["Dhruv Dhamani"]
+description = "Gather files into LLM-friendly context bundles with token counts, chunking, and TUI selection."
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/DhruvDh/context-gather"
+homepage = "https://github.com/DhruvDh/context-gather"
+keywords = ["llm", "context", "cli", "prompt", "code-review"]
+categories = ["command-line-utilities", "development-tools"]
 
 [dependencies]
 anyhow = "1.0.95"
+arboard = { version = "3.6", features = ["wayland-data-control"] }
 tiktoken-rs = { version = "0.9.1", features = ["async-openai", "dhat-heap"] }
 crossterm = "0.29.0"
 glob = "0.3.2"
@@ -17,7 +27,6 @@ dunce = "1.0.5"
 chrono = "0.4.41"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-cli-clipboard = "0.4.0"
 ratatui = "0.29.0"
 
 [dev-dependencies]

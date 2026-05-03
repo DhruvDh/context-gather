@@ -30,10 +30,15 @@ pub fn render(
             "Extensions (Ctrl+E to exit, Enter to apply)".to_owned(),
             &state.extension_search,
         )
+    } else if state.search_edit_mode {
+        (
+            "Search (Esc to command mode)".to_owned(),
+            &state.search_input,
+        )
     } else {
         let selected_count = state.items.iter().filter(|(_, checked)| *checked).count();
         (
-            format!("Fuzzy Search ({selected_count} selected)"),
+            format!("Fuzzy Search ({selected_count} selected, / to edit)"),
             &state.search_input,
         )
     };
@@ -139,6 +144,7 @@ pub fn render(
     let help_text = vec![
         Span::styled("↑/↓: Navigate  ", Style::default().fg(Color::Yellow)),
         Span::styled("Space: Toggle  ", Style::default().fg(Color::Yellow)),
+        Span::styled("/: Search  ", Style::default().fg(Color::Yellow)),
         Span::styled("Enter: Submit  ", Style::default().fg(Color::Yellow)),
         Span::styled("Ctrl+E: Ext  ", Style::default().fg(Color::Yellow)),
         Span::styled("q: Quit", Style::default().fg(Color::Yellow)),

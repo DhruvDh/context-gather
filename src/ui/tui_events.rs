@@ -56,6 +56,7 @@ pub fn handle_event(
                 // entering extension mode: save search, clear for extension
                 state.saved_search_input = state.search_input.clone();
                 state.search_input.clear();
+                state.search_edit_mode = false;
                 state.extension_mode = true;
                 if state.reset_ext_on_toggle {
                     state
@@ -72,6 +73,34 @@ pub fn handle_event(
             return Some(UiMsg::ToggleExtensionMode);
         }
 
+        if state.search_edit_mode {
+            match code {
+                KeyCode::Esc => {
+                    state.search_edit_mode = false;
+                }
+                KeyCode::Backspace => {
+                    state.search_input.pop();
+                    let filtered_file_indices = filtered_files(state);
+                    clamp_selection(
+                        &mut state.selected_idx,
+                        &mut state.scroll_offset,
+                        filtered_file_indices.len(),
+                    );
+                }
+                KeyCode::Char(c) if mods.is_empty() || mods == KeyModifiers::SHIFT => {
+                    state.search_input.push(c);
+                    let filtered_file_indices = filtered_files(state);
+                    clamp_selection(
+                        &mut state.selected_idx,
+                        &mut state.scroll_offset,
+                        filtered_file_indices.len(),
+                    );
+                }
+                _ => {}
+            }
+            return None;
+        }
+
         // If in extension-filter mode
         if state.extension_mode {
             let mut filtered_ext = filtered_exts(state);
@@ -82,10 +111,8 @@ pub fn handle_event(
             );
             match code {
                 KeyCode::Up => state.ext_selected_idx = state.ext_selected_idx.saturating_sub(1),
-                KeyCode::Down => {
-                    if state.ext_selected_idx + 1 < filtered_ext.len() {
-                        state.ext_selected_idx += 1;
-                    }
+                KeyCode::Down if state.ext_selected_idx + 1 < filtered_ext.len() => {
+                    state.ext_selected_idx += 1;
                 }
                 KeyCode::Backspace => {
                     state.extension_search.pop();
@@ -177,6 +204,10 @@ pub fn handle_event(
         // typing for fuzzy search (exclude space and 'q' which are handled separately)
         if mods.is_empty() {
             match code {
+                KeyCode::Char('/') => {
+                    state.search_edit_mode = true;
+                    return None;
+                }
                 KeyCode::Backspace => {
                     state.search_input.pop();
                     filtered_file_indices = filtered_files(state);
@@ -283,6 +314,33 @@ mod tests {
         let evt = Event::Key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE));
         let msg = handle_event(&mut state, evt);
         assert_eq!(msg, Some(UiMsg::Quit));
+    }
+
+    #[test]
+    fn test_search_edit_accepts_q_and_space() {
+        let mut state = make_state();
+        let evt = Event::Key(KeyEvent::new(KeyCode::Char('/'), KeyModifiers::NONE));
+        let msg = handle_event(&mut state, evt);
+        assert_eq!(msg, None);
+        assert!(state.search_edit_mode);
+
+        for ch in ['q', ' ', 'a'] {
+            let evt = Event::Key(KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE));
+            let msg = handle_event(&mut state, evt);
+            assert_eq!(msg, None);
+        }
+        assert_eq!(state.search_input, "q a");
+        assert!(state.items.iter().all(|(_, checked)| !*checked));
+    }
+
+    #[test]
+    fn test_esc_leaves_search_edit_mode() {
+        let mut state = make_state();
+        state.search_edit_mode = true;
+        let evt = Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        let msg = handle_event(&mut state, evt);
+        assert_eq!(msg, None);
+        assert!(!state.search_edit_mode);
     }
 
     #[test]

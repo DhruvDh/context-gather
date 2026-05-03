@@ -9,6 +9,12 @@ use anyhow::{Result, anyhow};
 use glob::glob;
 use ignore::WalkBuilder;
 
+#[derive(Debug, Clone, Default)]
+pub struct FileCollection {
+    pub files: Vec<FileContents>,
+    pub skipped: Vec<String>,
+}
+
 pub fn expand_paths(paths: Vec<String>) -> Result<Vec<PathBuf>> {
     let mut expanded = Vec::new();
 
@@ -78,11 +84,24 @@ pub fn collect_file_data(
     max_size: u64,
     root: &Path,
 ) -> Result<Vec<FileContents>> {
+    Ok(collect_file_data_with_skips(file_paths, max_size, root)?.files)
+}
+
+pub fn collect_file_data_with_skips(
+    file_paths: &[PathBuf],
+    max_size: u64,
+    root: &Path,
+) -> Result<FileCollection> {
     let mut results = Vec::new();
+    let mut skipped = Vec::new();
     for path in file_paths {
         match read_file(path, max_size, root) {
             Ok(fc) => results.push(fc),
-            Err(e) => eprintln!("{e}"),
+            Err(e) => {
+                let message = e.to_string();
+                eprintln!("{message}");
+                skipped.push(message);
+            }
         }
     }
     // Sort by folder then file name
@@ -94,7 +113,10 @@ pub fn collect_file_data(
             folder_cmp
         }
     });
-    Ok(results)
+    Ok(FileCollection {
+        files: results,
+        skipped,
+    })
 }
 
 /// Returns the number of tokens in the given text.

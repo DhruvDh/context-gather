@@ -2,6 +2,7 @@ use assert_fs::prelude::*;
 use context_gather::tokenizer::count as count_tokens;
 use predicates::prelude::*;
 use predicates::str::{contains, is_empty};
+use std::time::Duration;
 
 #[test]
 fn chunk_size_splits_and_summarizes() {
@@ -109,4 +110,27 @@ fn chunk_index_none_suppresses_stdout() {
         .success()
         .stdout(is_empty())
         .stderr(contains("OK"));
+}
+
+#[test]
+fn streaming_exits_on_stdin_eof() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    dir.child("foo.txt").write_str("hello world").unwrap();
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("context-gather");
+    cmd.current_dir(&dir)
+        .args([
+            "--stream",
+            "--chunk-size",
+            "100",
+            "--stdout",
+            "--no-clipboard",
+            ".",
+        ])
+        .write_stdin("")
+        .timeout(Duration::from_secs(2));
+    cmd.assert()
+        .success()
+        .stdout(contains("<shared-context>"))
+        .stderr(contains("stdin closed; leaving streaming mode."));
 }

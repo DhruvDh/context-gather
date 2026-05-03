@@ -13,7 +13,7 @@ fn parse_chunk_index(s: &str) -> Result<isize, String> {
 #[derive(Parser, Debug)]
 #[command(name = "context-gather")]
 #[command(
-    about = "Gather text file contents, group them by folder, output as XML to clipboard, \
+    about = "Gather text file contents, group them by folder, output as XML-like context to clipboard, \
                    then show token count."
 )]
 pub struct Cli {

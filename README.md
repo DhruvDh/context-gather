@@ -11,11 +11,11 @@ payload that can be pasted into a model without silently losing structure."
 
 ## Install And Build
 
-This repository uses Rust nightly because the crate is configured for Edition
-2024:
+This repository uses Rust 1.85 or newer because the crate is configured for
+Edition 2024:
 
 ```bash
-rustup toolchain install nightly
+rustup toolchain install stable
 cargo build
 ```
 
@@ -102,10 +102,14 @@ context-gather --max-size 262144 .
 
 Invalid UTF-8 files are treated as binary and skipped with a warning.
 
-## XML Escaping
+## XML-Like Output And Escaping
 
 File contents are raw by default, because raw code is usually easier for a model
 to read. XML attributes are always escaped when needed.
+
+Raw output is intentionally XML-like, not guaranteed parseable XML. If raw file
+contents contain context wrapper markers such as `</file-contents>`, the tool
+warns that the structure may be ambiguous.
 
 Use `--escape-xml` when a downstream parser needs escaped text content:
 
@@ -221,6 +225,11 @@ context-gather --max-size 262144 .
 
 Prefer `--stdout --no-clipboard` when you want to inspect or pipe output without
 touching the system clipboard.
+
+## Contributing And Security
+
+This project is licensed under the MIT License. See `CONTRIBUTING.md` for local
+development expectations and `SECURITY.md` for reporting and safe-usage notes.
 
 ## Development
 

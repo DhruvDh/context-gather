@@ -10,6 +10,43 @@ use anyhow::Result;
 use tracing::{error, warn};
 use tracing_subscriber::EnvFilter;
 
+fn copied_label(copied_idx: Option<usize>) -> String {
+    copied_idx
+        .map(|idx| idx.to_string())
+        .unwrap_or_else(|| "none".into())
+}
+
+fn summary_line(
+    files: usize,
+    tokens: Option<usize>,
+    chunks: usize,
+    copied_idx: Option<usize>,
+    skipped: usize,
+) -> String {
+    let mut summary = match tokens {
+        Some(tokens) => format!(
+            "OK {files} files • {tokens} tokens • {chunks} chunk{} • copied={}",
+            if chunks == 1 { "" } else { "s" },
+            copied_label(copied_idx)
+        ),
+        None => format!(
+            "OK {files} files • {chunks} chunk{} • copied={}",
+            if chunks == 1 { "" } else { "s" },
+            copied_label(copied_idx)
+        ),
+    };
+    if skipped > 0 {
+        summary.push_str(&format!(" • skipped={skipped}"));
+    }
+    summary
+}
+
+fn warn_if_no_files(files: usize) {
+    if files == 0 {
+        warn!("no files were included in output");
+    }
+}
+
 fn main() -> Result<()> {
     // Initialize tracing for structured logging, with RUST_LOG support
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn"));
@@ -64,6 +101,8 @@ fn main() -> Result<()> {
 
     // 4) Read file data
     pipeline.collect_file_data(config.max_size)?;
+    warn_if_no_files(pipeline.file_data().len());
+    pipeline.warn_raw_structure_risks(config.escape_xml);
 
     // 5) Build outputs
     let needs_chunks = config.multi_step || chunk_limit > 0;
@@ -111,23 +150,13 @@ fn main() -> Result<()> {
         let token_count = config
             .model_context
             .map(|_| gather::count_tokens(xml_output));
-        let summary = match token_count {
-            Some(tokens) => format!(
-                "OK {} files • {} tokens • 1 chunk • copied={}",
-                pipeline.file_data().len(),
-                tokens,
-                copied_idx
-                    .map(|idx| idx.to_string())
-                    .unwrap_or_else(|| "none".into())
-            ),
-            None => format!(
-                "OK {} files • 1 chunk • copied={}",
-                pipeline.file_data().len(),
-                copied_idx
-                    .map(|idx| idx.to_string())
-                    .unwrap_or_else(|| "none".into())
-            ),
-        };
+        let summary = summary_line(
+            pipeline.file_data().len(),
+            token_count,
+            1,
+            copied_idx,
+            pipeline.skipped_count(),
+        );
         eprintln!("{summary}");
         if let (Some(limit), Some(total_token_count)) = (config.model_context, token_count)
             && total_token_count > limit
@@ -207,26 +236,14 @@ fn main() -> Result<()> {
     }
     // 8) Summary
     let total_token_count: usize = chunks.iter().map(|c| c.tokens).sum();
-    if config.model_context.is_some() {
-        eprintln!(
-            "OK {} files • {} tokens • {} chunks • copied={}",
-            pipeline.file_data().len(),
-            total_token_count,
-            total_chunks,
-            copied_idx
-                .map(|idx| idx.to_string())
-                .unwrap_or_else(|| "none".into())
-        );
-    } else {
-        eprintln!(
-            "OK {} files • {} chunks • copied={}",
-            pipeline.file_data().len(),
-            total_chunks,
-            copied_idx
-                .map(|idx| idx.to_string())
-                .unwrap_or_else(|| "none".into())
-        );
-    }
+    let summary = summary_line(
+        pipeline.file_data().len(),
+        config.model_context.map(|_| total_token_count),
+        total_chunks,
+        copied_idx,
+        pipeline.skipped_count(),
+    );
+    eprintln!("{summary}");
     if config.no_clipboard && !config.stdout {
         eprintln!("Note: neither --stdout nor clipboard copy requested; nothing visible.");
     }

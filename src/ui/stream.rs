@@ -37,7 +37,10 @@ pub fn multi_step_mode(
             ui.flush()?;
         }
         let mut cmd = String::new();
-        io::stdin().read_line(&mut cmd)?;
+        if io::stdin().read_line(&mut cmd)? == 0 {
+            eprintln!("stdin closed; leaving multi-step mode.");
+            return Ok(());
+        }
         let cmd = cmd.trim();
         if cmd.eq_ignore_ascii_case("q") {
             break;
@@ -138,7 +141,10 @@ pub fn streaming_mode(
             ui.flush()?;
         }
         let mut cmd = String::new();
-        io::stdin().read_line(&mut cmd)?;
+        if io::stdin().read_line(&mut cmd)? == 0 {
+            eprintln!("stdin closed; leaving streaming mode.");
+            return Ok(());
+        }
         let cmd = cmd.trim();
         if cmd.eq_ignore_ascii_case("q") {
             break;

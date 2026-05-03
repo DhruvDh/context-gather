@@ -1,9 +1,9 @@
 use anyhow::{Result, anyhow};
-use cli_clipboard::{ClipboardContext, ClipboardProvider};
+use arboard::Clipboard;
 
 fn try_copy(text: &str) -> Result<()> {
-    let mut ctx = ClipboardContext::new().map_err(|e| anyhow!("init clipboard: {e}"))?;
-    ctx.set_contents(text.to_owned())
+    let mut ctx = Clipboard::new().map_err(|e| anyhow!("init clipboard: {e}"))?;
+    ctx.set_text(text.to_owned())
         .map_err(|e| anyhow!("set clipboard contents: {e}"))
 }
 
