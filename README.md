@@ -1,473 +1,238 @@
-# `context-gather`
+# context-gather
 
-# `context-gather` is a Rust CLI tool for gathering file contexts across folders, grouping them into XML-like output, copying to clipboard, and token counting
+`context-gather` is a Rust CLI for collecting selected text files into an
+LLM-friendly XML-like context bundle. It can copy the bundle to the clipboard,
+print it to stdout, count tokens, split large contexts into chunks, and expose a
+TUI for selecting files before output.
 
-Install with Rust nightly (Edition 2024):
+The tool is built for code-review and research workflows where the important
+property is not just "read files," but "produce a predictable, inspectable
+payload that can be pasted into a model without silently losing structure."
+
+## Install And Build
+
+This repository uses Rust nightly because the crate is configured for Edition
+2024:
 
 ```bash
-rustup default nightly
-cargo install context-gather
+rustup toolchain install nightly
+cargo build
 ```
 
-Below is a step-by-step outline for using and extending `context-gather`. It's designed to do the following:
-
-1. **Accept file paths (and glob patterns) on the command line.**  
-2. **Optionally open a TUI** for interactive file selection when a flag (e.g., `-i` or `--interactive`) is used.  
-3. **Gather contents** of the specified text files.  
-4. **Group them by folder** in an XML-like structure for clarity.  
-5. **Copy** the resulting XML output to the clipboard.  
-6. **Token-count** the resulting output using `tiktoken_rs`.  
-7. **Handle non-text files** gracefully (warn, but do not fail).  
-
-Below, I'll describe an example architecture, key dependencies, and pseudo-code to illustrate how the various steps tie together.
-
-## 1. Project Structure
-
-A recommended project layout:
-
-```
-context-gather/
-├─ Cargo.toml
-└─ src/
-   ├─ main.rs
-   ├─ cli.rs          // Arg parsing
-   ├─ interactive.rs  // TUI functionality
-   ├─ gather.rs       // Core logic for gathering, grouping, etc.
-   ├─ xml_output.rs   // Functions to generate the XML-like output
-   └─ clipboard.rs    // Clipboard integration
-```
-
-This structure is not mandatory, but it keeps different components modular and easier to maintain.
-
-## 2. Dependencies
-
-In your `Cargo.toml`, include:
-
-```toml
-[package]
-name = "context-gather"
-version = "0.1.0"
-edition = "2024"
-
-[dependencies]
-anyhow = "1.0.95"
-clap = { version = "4.4.6", features = ["derive"] }
-crossterm = "0.29.0"
-glob = "0.3.2"
-globset = "0.4.16"
-tiktoken-rs = "0.9.1"
-ratatui = "0.29.0"
-path-slash = "0.2.1"
-dunce = "1.0.5"
-chrono = "0.4.41"
-cli-clipboard = "0.4.0"
-```
-
-Using tiktoken-rs v0.9.1.
-
-(Adjust versions to the latest semver releases as needed.)
-
-## 3. Context Header Format
-
-When using `--chunk-size`, the first payload contains a machine-readable header:
-
-```xml
-<shared-context-header version="1"
-                       total-chunks="N"
-                       chunk-size="40000"
-                       generated-at="2025-05-03T15:04:22Z">
-  <file-map total-files="F">
-    <file id="0" path="src/main.rs" tokens="1874" parts="1"/>
-    <file id="1" path="src/lib.rs"  tokens="920"  parts="2"/>
-    …
-  </file-map>
-
-  <instructions>
-    You will receive N chunks (including this header).
-    Reassemble files by <file-map> order and parts.
-    Respond "READY" after the final chunk.
-  </instructions>
-</shared-context-header>
-```
-
-Git metadata (branch, recent commits, diff) is included only when you pass `--git-info`.
-
-## 3. Parsing Command-Line Arguments (in `cli.rs`)
-
-Use whichever CLI parser you prefer (e.g., [`clap`](https://github.com/clap-rs/clap)). Example:
-
-```rust
-use clap::{Parser, Arg};
-
-#[derive(Parser, Debug)]
-#[command(name = "context-gather")]
-#[command(about = "Gather text file contents, group them by folder, output as XML to clipboard, then show token count.")]
-pub struct Cli {
-    /// File paths (supporting globs)
-    #[arg(required = true)]
-    pub paths: Vec<String>,
-
-    /// If set, opens the TUI for interactive selection.
-    #[arg(short = 'i', long = "interactive")]
-    pub interactive: bool,
-}
-```
-
-## 4. Entry Point in `main.rs`
-
-```rust
-mod cli;
-mod interactive;
-mod gather;
-mod xml_output;
-mod clipboard;
-
-use cli::Cli;
-use clap::Parser;
-use anyhow::Result;
-
-fn main() -> Result<()> {
-    let cli = Cli::parse();
-
-    // 1. Expand globs and gather file paths
-    let mut all_paths = gather::expand_paths(cli.paths)?;
-
-    // 2. If `interactive` is true, launch TUI to select files
-    if cli.interactive {
-        all_paths = interactive::select_files_tui(all_paths)?;
-    }
-
-    // 3. Gather file contents, ignoring non-text files (with warnings)
-    let file_data = gather::collect_file_data(&all_paths)?;
-
-    // 4. Build XML-like output grouped by folder
-    let xml_output = xml_output::build_xml(&file_data);
-
-    // 5. Copy to clipboard
-    clipboard::copy_to_clipboard(&xml_output, false, false)?;
-
-    // 6. Count tokens and print them
-    gather::count_tokens(&xml_output)?;
-
-    Ok(())
-}
-```
-
-### 4.1 Handling Globs
-
-In `gather.rs` (or a dedicated utility file), you might have:
-
-```rust
-use anyhow::{Result, anyhow};
-use glob::glob;
-use std::path::PathBuf;
-
-pub fn expand_paths(paths: Vec<String>) -> Result<Vec<PathBuf>> {
-    let mut expanded = Vec::new();
-
-    for p in paths {
-        // Attempt to treat it like a glob first
-        let pattern_results = glob(&p)
-            .map_err(|e| anyhow!("Invalid glob pattern {}: {:?}", p, e))?;
-
-        // If no matches, consider it a normal path
-        let mut has_match = false;
-        for path_res in pattern_results {
-            has_match = true;
-            let path = path_res?;
-            expanded.push(path);
-        }
-        // If it's not a valid glob or no matches found, treat as a literal path
-        if !has_match {
-            expanded.push(PathBuf::from(&p));
-        }
-    }
-
-    Ok(expanded)
-}
-```
-
-## 5. Interactive TUI (in `interactive.rs`)
-
-This is a sketch of how you could structure the TUI:
-
-```rust
-use std::path::PathBuf;
-use anyhow::Result;
-
-// This would be more elaborate in practice with TUI rendering, etc.
-pub fn select_files_tui(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
-    // 1. Initialize TUI with crossterm or similar
-    // 2. Present a list of files with checkboxes or selected states.
-    // 3. Let user toggle selection using arrow keys + space.
-    // 4. On Enter, exit with the selected paths.
-
-    // For demonstration, simply return them all as selected
-    Ok(paths)
-}
-```
-
-Of course, you would implement the actual TUI rendering loop (with `ratatui::Terminal`, etc.), but the above shows how it might fit into the overall flow.
-
-## 6. Gathering and Grouping File Contents
-
-In `gather.rs`:
-
-```rust
-use anyhow::{Result, anyhow};
-use std::{
-    fs,
-    io::{Read, BufReader},
-    path::{Path, PathBuf},
-};
-
-#[derive(Debug)]
-pub struct FileContents {
-    pub folder: PathBuf,
-    pub path: PathBuf,
-    pub contents: String,
-}
-
-pub fn collect_file_data(paths: &[PathBuf]) -> Result<Vec<FileContents>> {
-    let mut results = Vec::new();
-
-    for path in paths {
-        if !path.is_file() {
-            eprintln!("Warning: {:?} is not a file. Skipping.", path);
-            continue;
-        }
-
-        // Attempt to read the file
-        match fs::File::open(path) {
-            Ok(file) => {
-                let mut reader = BufReader::new(file);
-                // Try reading to string
-                let mut content = String::new();
-                if let Err(_) = reader.read_to_string(&mut content) {
-                    eprintln!("Warning: {:?} is not a valid text file. Skipping.", path);
-                    continue;
-                }
-
-                // If successful, store results
-                results.push(FileContents {
-                    folder: path.parent().unwrap_or_else(|| Path::new("")).to_path_buf(),
-                    path: path.clone(),
-                    contents: content,
-                });
-            }
-            Err(e) => {
-                eprintln!("Warning: Could not open {:?}: {:?}", path, e);
-            }
-        }
-    }
-
-    // Sort results by folder (then by file name)
-    results.sort_by(|a, b| {
-        let folder_cmp = a.folder.cmp(&b.folder);
-        if folder_cmp == std::cmp::Ordering::Equal {
-            a.path.cmp(&b.path)
-        } else {
-            folder_cmp
-        }
-    });
-
-    Ok(results)
-}
-
-// For token counting
-use tiktoken_rs::o200k_base;
-
-pub fn count_tokens(text: &str) -> Result<()> {
-    let bpe = o200k_base()?;
-    let tokens = bpe.encode_with_special_tokens(text);
-    println!("Token count: {}", tokens.len());
-    Ok(())
-}
-```
-
-## 7. Generating the XML-Like Output (in `xml_output.rs`)
-
-Your XML-like structure might look like:
-
-```xml
-<folder path="src">
-  <file-contents path="src/main.rs" name="main.rs">
-  // file contents
-  </file-contents>
-  <file-contents path="src/lib.rs" name="lib.rs">
-  // file contents
-  </file-contents>
-</folder>
-```
-
-Here's a possible approach:
-
-```rust
-use super::gather::FileContents;
-use std::path::PathBuf;
-
-pub fn build_xml(files: &[FileContents]) -> String {
-    if files.is_empty() {
-        return "".to_string();
-    }
-
-    // We iterate folder by folder
-    let mut current_folder: Option<&PathBuf> = None;
-    let mut output = String::new();
-
-    for file in files {
-        // If this is a new folder, close the old folder tag and open a new one
-        if current_folder.is_none() || current_folder.unwrap() != &file.folder {
-            // Close the previous folder if needed
-            if current_folder.is_some() {
-                output.push_str("  </folder>\n");
-                output.push_str("\n");
-            }
-            current_folder = Some(&file.folder);
-
-            // Start new folder
-            let folder_str = file.folder.to_string_lossy();
-            output.push_str(&format!("  <folder path=\"{}\">\n", folder_str));
-        }
-
-        // Add file contents
-        let file_name = file.path.file_name()
-                            .map(|s| s.to_string_lossy().to_string())
-                            .unwrap_or_else(|| "unknown".to_string());
-        let path_str = file.path.to_string_lossy();
-        output.push_str(&format!("    <file-contents path=\"{}\" name=\"{}\">\n",
-                                 path_str, file_name));
-        // Indent file contents for readability, or just dump them as-is
-        let escaped_contents = escape_special_chars(&file.contents);
-        output.push_str(&format!("{}\n", escaped_contents));
-        output.push_str("    </file-contents>\n");
-    }
-
-    // Close the last folder
-    if current_folder.is_some() {
-        output.push_str("  </folder>\n");
-    }
-
-    // Wrap everything in a top-level XML-ish tag for clarity
-    format!("<context-gather>\n{}\n</context-gather>", output)
-}
-
-/// Escape special characters if needed (optional)
-fn escape_special_chars(s: &str) -> String {
-    // Very naive example:
-    s.replace("&", "&amp;")
-     .replace("<", "&lt;")
-     .replace(">", "&gt;")
-}
-```
-
-Note that escaping is now off by default. Use `--escape-xml` to enable content escaping (attributes are always escaped when needed).
-
-## 8. Clipboard Integration (in `clipboard.rs`)
-
-Using [`cli-clipboard`](https://crates.io/crates/cli-clipboard) for Wayland-safe CLIs:
-
-```rust
-use anyhow::{Result, anyhow};
-use cli_clipboard::{ClipboardContext, ClipboardProvider};
-
-/// Returns true when the clipboard copy succeeds.
-pub fn copy_to_clipboard(text: &str, fail_hard: bool) -> Result<bool> {
-    let mut ctx = ClipboardContext::new().map_err(|e| anyhow!("init clipboard: {e}"))?;
-    match ctx
-        .set_contents(text.to_owned())
-        .map_err(|e| anyhow!("set clipboard contents: {e}"))
-    {
-        Ok(()) => Ok(true),
-        Err(err) => {
-            if fail_hard {
-                return Err(anyhow!(
-                    "clipboard unavailable ({err}); re-run with --stdout or --no-clipboard"
-                ));
-            }
-            eprintln!("clipboard unavailable: {err}");
-            Ok(false)
-        }
-    }
-}
-```
-
-## 9. Overall Flow
-
-Putting it all together, your CLI will:
-
-1. **Parse arguments** (including `--interactive`).  
-2. **Expand globs** and gather a list of files.  
-3. If `--interactive`, **show TUI** to let the user unselect or select files.  
-4. **Collect file contents**; for each file that isn't valid text, log a warning.  
-5. **Generate an XML-like string**, grouping by folder.  
-6. **Copy** that string to the clipboard.  
-7. **Count tokens** using `tiktoken_rs` (default GPT-5.2 encoding; override with `--tokenizer-model` or `CG_TOKENIZER_MODEL`).  
-8. **Print** the token count.  
-
-By default (without `--interactive`), it just does steps 1, 2, 4–8 and finishes immediately.
-
-## Usage Examples
-
-Note: when `--stdout` is set, XML is written to stdout and human-readable summaries/warnings go to stderr.
-If `--stdout` is not set and clipboard copy fails, the command exits with an error; re-run with
-`--stdout` or `--no-clipboard`.
-
-Exclude patterns and multi-step globs are matched against paths relative to the current working directory. Use `**` to match across directories (e.g., `**/*.rs`).
-By default, file contents are unescaped; use `--escape-xml` for escaped output.
-
-# Interactive selection + chunk streaming (alias: -i)
+From this repository, install the local binary with:
 
 ```bash
-context-gather -i -c 39000
+cargo install --path .
 ```
 
-# TUI selection only, then emit all chunks non-interactively
+If the crate is published in your environment, `cargo install context-gather`
+also works.
+
+## Quick Start
+
+Gather the current directory and copy the result to the clipboard:
 
 ```bash
-context-gather --select -c 39000 --stdout .
+context-gather .
 ```
 
-# Stream chunks without the selection TUI
+Print the XML to stdout and avoid clipboard access:
 
 ```bash
-context-gather --stream -c 39000 .
+context-gather --stdout --no-clipboard .
 ```
 
-# Non-interactive: copy or print a specific chunk
+Gather a few paths:
 
 ```bash
-# Copy chunk 2 to clipboard
-context-gather . -c 39000 -k 2
-
-# Print chunk 2 to stdout and do not touch clipboard
-context-gather . -c 39000 -k 2 -n -o
+context-gather README.md src tests
 ```
 
-# Multi-step mode (cannot be combined with --chunk-size)
+Use a glob:
 
 ```bash
-context-gather -m .
+context-gather 'src/**/*.rs'
 ```
 
-# Override tokenizer model
+Open the file-selection TUI:
 
 ```bash
-context-gather . --tokenizer-model gpt-5.2
+context-gather --select .
+```
+
+## Output And Clipboard Behavior
+
+By default, `context-gather` copies the generated context to the clipboard and
+prints a human-readable summary to stderr:
+
+```text
+OK 22 files • 21164 tokens • 1 chunk • copied=0
+```
+
+Use `--stdout` to print the XML payload to stdout. Summaries, warnings, and
+errors stay on stderr so stdout remains machine-readable.
+
+If clipboard access fails and `--stdout` is not set, the command exits with an
+error. If `--stdout` is set, clipboard failure is only a warning. Use
+`--no-clipboard` when clipboard access is undesirable or unavailable.
+
+## Paths, Globs, And Excludes
+
+Arguments are file paths, directory paths, or glob patterns. Existing literal
+paths take precedence over glob parsing, so filenames containing characters such
+as `[` or `*` are accepted when the path exists.
+
+For directory arguments, the tool recursively discovers files with the
+`ignore` crate. Standard filters are enabled, so `.gitignore` rules, hidden
+files, and common ignored directories are respected.
+
+Exclude patterns are matched against paths relative to the current working
+directory and against absolute paths. Use `**` when a pattern must span
+directories:
+
+```bash
+context-gather --exclude-paths 'target/**' --exclude-paths '**/*.lock' .
+```
+
+Files larger than `--max-size` are skipped. The default is 1 MiB:
+
+```bash
+context-gather --max-size 262144 .
+```
+
+Invalid UTF-8 files are treated as binary and skipped with a warning.
+
+## XML Escaping
+
+File contents are raw by default, because raw code is usually easier for a model
+to read. XML attributes are always escaped when needed.
+
+Use `--escape-xml` when a downstream parser needs escaped text content:
+
+```bash
+context-gather --stdout --no-clipboard --escape-xml src/main.rs
+```
+
+The root element is `<shared-context>`. Non-chunked output includes a
+`<file-map>` followed by `<folder>` and `<file-contents>` elements.
+
+## Chunked Context
+
+Use `--chunk-size` to split output into token-bounded chunks:
+
+```bash
+context-gather --stdout --no-clipboard --chunk-size 39000 .
+```
+
+Chunk `0` contains a `<shared-context-header>` with file metadata and
+instructions. Later chunks contain `<context-chunk>` elements. Files are kept
+intact when possible; oversized files are split by line and marked with
+`part="p/N"`.
+
+Print or copy one chunk by index:
+
+```bash
+context-gather --stdout --no-clipboard --chunk-size 39000 --chunk-index 2 .
+```
+
+Use `--chunk-index -1` to build and summarize chunks without printing or
+copying any chunk.
+
+## Streaming Mode
+
+Use `--stream` with `--chunk-size` for an interactive chunk-copy REPL:
+
+```bash
+context-gather --stream --chunk-size 39000 .
+```
+
+Streaming commands are:
+
+- press Enter to move to the next chunk,
+- type a chunk number to jump,
+- type `q` to quit.
+
+`--interactive` is shorthand for file selection and, when `--chunk-size` is
+provided, streaming:
+
+```bash
+context-gather --interactive --chunk-size 39000 .
+```
+
+## Multi-Step Mode
+
+Multi-step mode copies or prints only the header first, then lets you request
+files on demand by id, path, or glob:
+
+```bash
+context-gather --multi-step --stdout --no-clipboard .
+```
+
+At the prompt, enter `2`, `src/main.rs`, `*.rs`, or `q` to quit. Multi-step mode
+cannot be combined with `--chunk-size`.
+
+## Git Metadata
+
+Pass `--git-info` with chunked or multi-step output to include the current
+branch, recent commit subjects, and changed filenames in the header:
+
+```bash
+context-gather --stdout --no-clipboard --chunk-size 39000 --git-info .
+```
+
+Changed files are compared against the first available base in this order:
+the upstream branch, `origin/HEAD`, local `main`, local `master`,
+`origin/main`, then `origin/master`. If no base is available, the header says
+that changed files are unavailable instead of inventing a default.
+
+`--git-info` does not include full diff bodies.
+
+## Tokenizer
+
+Token counts use a shared `tiktoken-rs` tokenizer. The default model name is
+`gpt-5.2`, which maps to `o200k_base`; `gpt-5` is also accepted as an alias.
+Models known directly to `tiktoken-rs` are accepted. Unsupported names fail
+fast so token-count mistakes are visible.
+
+Override the model with either the CLI flag or environment variable:
+
+```bash
+context-gather --tokenizer-model gpt-5.2 .
 CG_TOKENIZER_MODEL=gpt-5.2 context-gather .
 ```
 
-## How Chunk Streaming Works
+The CLI flag takes precedence over `CG_TOKENIZER_MODEL`.
 
-When using `--chunk-size` (`-c`), `context-gather` splits the XML context into LLM-friendly chunks:
+Use `--no-model-context` to suppress token summaries and model-context warnings,
+or `--model-context` to set a different warning threshold.
 
-1. **Smart splitting**: every `<file-contents>` block stays intact; oversize files are split by lines with `part="p/N"` markers.
-2. **Machine-readable header**: The first chunk begins with a `<shared-context-header>` carrying:
-   - `version`: format version
-   - `total-chunks`: number of chunks including header
-   - `chunk-size`: requested token ceiling
-   - `generated-at`: ISO8601 timestamp
-   - `<file-map>`: list of files with `id`, `path`, `tokens`, and `parts` per file
-3. **Prompt cycle**: in interactive mode, after TUI selection you get a simple prompt:
-   - `c` to copy the next chunk
-   - `
+## Privacy And Sensitive Files
+
+Always inspect what you are about to send to a model. The tool respects standard
+ignore rules, but it cannot know which files are sensitive in your project.
+
+Useful safeguards:
+
+```bash
+context-gather --stdout --no-clipboard --exclude-paths '.env' --exclude-paths '**/*.pem' .
+context-gather --select .
+context-gather --max-size 262144 .
+```
+
+Prefer `--stdout --no-clipboard` when you want to inspect or pipe output without
+touching the system clipboard.
+
+## Development
+
+Common commands:
+
+```bash
+just tokens
+cargo fmt --check
+cargo clippy
+cargo test
+```
+
+`just verify` runs `cargo fmt`, `cargo clippy`, and `cargo test`. Use
+`cargo fmt --check` for review-only work when you do not want the formatter to
+rewrite files.

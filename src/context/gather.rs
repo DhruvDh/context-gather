@@ -13,6 +13,12 @@ pub fn expand_paths(paths: Vec<String>) -> Result<Vec<PathBuf>> {
     let mut expanded = Vec::new();
 
     for p in paths {
+        let literal_path = PathBuf::from(&p);
+        if literal_path.exists() {
+            expanded.push(literal_path);
+            continue;
+        }
+
         // Normalize Windows path separators for glob patterns
         let pattern = p.replace('\\', "/");
         let pattern_results =

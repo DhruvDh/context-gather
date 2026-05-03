@@ -3,6 +3,7 @@ use std::sync::OnceLock;
 use tiktoken_rs::{CoreBPE, get_bpe_from_model, o200k_base};
 
 const DEFAULT_MODEL: &str = "gpt-5.2";
+const O200K_ALIASES: &[&str] = &["gpt-5.2", "gpt-5"];
 
 fn normalize_model_name(model: &str) -> String {
     model
@@ -17,13 +18,16 @@ fn normalize_model_name(model: &str) -> String {
 
 fn try_bpe_for_model(model: &str) -> Result<CoreBPE> {
     let normalized = normalize_model_name(model);
+    if O200K_ALIASES.contains(&normalized.as_str()) {
+        return o200k_base().map_err(|e| anyhow!("tokenizer init failed: {e}"));
+    }
     if let Ok(bpe) = get_bpe_from_model(&normalized) {
         return Ok(bpe);
     }
-    if normalized.starts_with("gpt-5") {
-        return o200k_base().map_err(|e| anyhow!("tokenizer init failed: {e}"));
-    }
-    o200k_base().map_err(|e| anyhow!("tokenizer init failed: {e}"))
+    Err(anyhow!(
+        "unsupported tokenizer model '{model}' (normalized as '{normalized}'); \
+         use gpt-5.2, gpt-5, or a model known to tiktoken-rs"
+    ))
 }
 
 fn bpe_for_model_or_panic(model: &str) -> CoreBPE {
@@ -49,7 +53,11 @@ pub fn init(model: Option<&str>) -> Result<()> {
     }
     let model = model
         .map(normalize_model_name)
-        .or_else(|| std::env::var("CG_TOKENIZER_MODEL").ok())
+        .or_else(|| {
+            std::env::var("CG_TOKENIZER_MODEL")
+                .ok()
+                .map(|m| normalize_model_name(&m))
+        })
         .unwrap_or_else(|| DEFAULT_MODEL.to_string());
     TOK.set(try_bpe_for_model(&model)?)
         .map_err(|_| anyhow!("tokenizer already initialized"))?;

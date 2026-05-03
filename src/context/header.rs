@@ -5,6 +5,57 @@ use path_slash::PathBufExt;
 use std::fmt::Write;
 use std::process::Command;
 
+fn git_stdout(args: &[&str]) -> Option<String> {
+    Command::new("git").args(args).output().ok().and_then(|o| {
+        if o.status.success() {
+            String::from_utf8(o.stdout)
+                .ok()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+        } else {
+            None
+        }
+    })
+}
+
+fn git_ref_exists(refname: &str) -> bool {
+    Command::new("git")
+        .args(["rev-parse", "--verify", "--quiet", refname])
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+fn detect_changed_files_base() -> Option<String> {
+    if let Some(upstream) = git_stdout(&[
+        "rev-parse",
+        "--abbrev-ref",
+        "--symbolic-full-name",
+        "@{upstream}",
+    ]) {
+        return Some(upstream);
+    }
+    if let Some(origin_head) = git_stdout(&[
+        "symbolic-ref",
+        "--quiet",
+        "--short",
+        "refs/remotes/origin/HEAD",
+    ]) {
+        return Some(origin_head);
+    }
+    for (refname, display) in [
+        ("refs/heads/main", "main"),
+        ("refs/heads/master", "master"),
+        ("refs/remotes/origin/main", "origin/main"),
+        ("refs/remotes/origin/master", "origin/master"),
+    ] {
+        if git_ref_exists(refname) {
+            return Some(display.to_string());
+        }
+    }
+    None
+}
+
 /// Builds the shared-context-header XML for LLM consumption.
 pub fn make_header(
     total_chunks: usize,
@@ -48,50 +99,17 @@ pub fn make_header(
             escape_note = escape_note
         )
     };
-    // Gather git info: branch, recent commits, and diff
+    // Gather git info: branch, recent commits, and changed files
     let mut git_info = String::new();
-    let mut diff_xml = String::new();
+    let mut changed_files_xml = String::new();
     if include_git {
-        let git_available = Command::new("git")
-            .args(["rev-parse", "--is-inside-work-tree"])
-            .output()
-            .ok()
-            .and_then(|o| {
-                if o.status.success() {
-                    String::from_utf8(o.stdout).ok()
-                } else {
-                    None
-                }
-            })
-            .map(|s| s.trim() == "true")
+        let git_available = git_stdout(&["rev-parse", "--is-inside-work-tree"])
+            .map(|s| s == "true")
             .unwrap_or(false);
 
         if git_available {
-            let branch = Command::new("git")
-                .args(["rev-parse", "--abbrev-ref", "HEAD"])
-                .output()
-                .ok()
-                .and_then(|o| {
-                    if o.status.success() {
-                        String::from_utf8(o.stdout)
-                            .ok()
-                            .map(|s| s.trim_end().to_string())
-                    } else {
-                        None
-                    }
-                });
-            let commits = Command::new("git")
-                .args(["log", "-5", "--pretty=format:%s"])
-                .output()
-                .ok()
-                .and_then(|o| {
-                    if o.status.success() {
-                        String::from_utf8(o.stdout).ok()
-                    } else {
-                        None
-                    }
-                })
-                .unwrap_or_default();
+            let branch = git_stdout(&["rev-parse", "--abbrev-ref", "HEAD"]);
+            let commits = git_stdout(&["log", "-5", "--pretty=format:%s"]).unwrap_or_default();
             let commits: Vec<String> = commits.lines().map(|l| l.to_string()).collect();
 
             if let Some(branch) = branch {
@@ -106,45 +124,60 @@ pub fn make_header(
                 let _ = writeln!(&mut git_info, "  <!-- git info unavailable -->");
             }
 
-            let diff_out = Command::new("git")
-                .args(["diff", "--name-only", "origin/main"])
-                .output();
-            let diff_ok = diff_out
-                .as_ref()
-                .map(|o| o.status.success())
-                .unwrap_or(false);
-            let diff_output = diff_out
-                .ok()
-                .and_then(|o| {
-                    if o.status.success() {
-                        String::from_utf8(o.stdout).ok()
-                    } else {
-                        None
+            if let Some(base) = detect_changed_files_base() {
+                let diff_out = Command::new("git")
+                    .args(["diff", "--name-only", &base])
+                    .output();
+                let diff_ok = diff_out
+                    .as_ref()
+                    .map(|o| o.status.success())
+                    .unwrap_or(false);
+                let diff_output = diff_out
+                    .ok()
+                    .and_then(|o| {
+                        if o.status.success() {
+                            String::from_utf8(o.stdout).ok()
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or_default();
+                let changed: Vec<String> = diff_output.lines().map(|l| l.to_string()).collect();
+                if !changed.is_empty() {
+                    let base_attr = maybe_escape_attr(&base, escape_xml);
+                    let _ = writeln!(
+                        &mut changed_files_xml,
+                        "  <changed-files diffed-against=\"{}\">",
+                        base_attr
+                    );
+                    for file in &changed {
+                        let file_text = maybe_escape_text(file, true);
+                        let _ = writeln!(&mut changed_files_xml, "    <file>{}</file>", file_text);
                     }
-                })
-                .unwrap_or_default();
-            let changed: Vec<String> = diff_output.lines().map(|l| l.to_string()).collect();
-            if !changed.is_empty() {
-                let _ = writeln!(
-                    &mut diff_xml,
-                    "  <changed-files diffed-against=\"origin/main\">"
-                );
-                for file in &changed {
-                    let file_text = maybe_escape_text(file, true);
-                    let _ = writeln!(&mut diff_xml, "    <file>{}</file>", file_text);
+                    let _ = writeln!(&mut changed_files_xml, "  </changed-files>");
+                } else if !diff_ok {
+                    let _ = writeln!(
+                        &mut changed_files_xml,
+                        "  <!-- changed files unavailable -->"
+                    );
                 }
-                let _ = writeln!(&mut diff_xml, "  </changed-files>");
-            } else if !diff_ok {
-                let _ = writeln!(&mut diff_xml, "  <!-- git diff unavailable -->");
+            } else {
+                let _ = writeln!(
+                    &mut changed_files_xml,
+                    "  <!-- changed files unavailable: no git base found -->"
+                );
             }
         } else {
             let _ = writeln!(&mut git_info, "  <!-- git info unavailable -->");
-            let _ = writeln!(&mut diff_xml, "  <!-- git diff unavailable -->");
+            let _ = writeln!(
+                &mut changed_files_xml,
+                "  <!-- changed files unavailable: not a git repository -->"
+            );
         }
     }
     // Compose full header with closing tag
     format!(
-        "<shared-context-header version=\"1\" total-chunks=\"{total_chunks}\" chunk-size=\"{limit}\" generated-at=\"{ts}\">\n  <file-map total-files=\"{total}\">\n{map}  </file-map>\n{instructions}{git_info}{diff_xml}</shared-context-header>\n",
+        "<shared-context-header version=\"1\" total-chunks=\"{total_chunks}\" chunk-size=\"{limit}\" generated-at=\"{ts}\">\n  <file-map total-files=\"{total}\">\n{map}  </file-map>\n{instructions}{git_info}{changed_files_xml}</shared-context-header>\n",
         total_chunks = total_chunks,
         limit = limit,
         ts = ts,
@@ -152,6 +185,6 @@ pub fn make_header(
         map = map,
         instructions = instructions,
         git_info = git_info,
-        diff_xml = diff_xml
+        changed_files_xml = changed_files_xml
     )
 }

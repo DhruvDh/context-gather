@@ -19,6 +19,40 @@ fn expand_paths_glob_and_literal() {
 }
 
 #[test]
+fn expand_paths_accepts_existing_literal_with_glob_metacharacters() {
+    let td = assert_fs::TempDir::new().unwrap();
+    let literal = td.child("a[.txt");
+    literal.write_str("bracket").unwrap();
+
+    let paths = expand_paths(vec![literal.path().to_string_lossy().to_string()]).unwrap();
+
+    assert_eq!(paths, vec![literal.path().to_path_buf()]);
+}
+
+#[test]
+fn expand_paths_existing_literal_takes_precedence_over_glob() {
+    let td = assert_fs::TempDir::new().unwrap();
+    let literal = td.child("star*.txt");
+    let glob_match = td.child("star-other.txt");
+    literal.write_str("literal").unwrap();
+    glob_match.write_str("match").unwrap();
+
+    let paths = expand_paths(vec![literal.path().to_string_lossy().to_string()]).unwrap();
+
+    assert_eq!(paths, vec![literal.path().to_path_buf()]);
+}
+
+#[test]
+fn expand_paths_invalid_glob_errors_when_literal_is_missing() {
+    let td = assert_fs::TempDir::new().unwrap();
+    let missing = td.path().join("missing[.txt");
+
+    let err = expand_paths(vec![missing.to_string_lossy().to_string()]).unwrap_err();
+
+    assert!(format!("{err}").contains("Invalid glob pattern"), "{err}");
+}
+
+#[test]
 fn gather_all_file_paths_respects_gitignore() {
     let td = basic_fs();
     let paths = gather_all_file_paths(&[td.path().into()]).unwrap();
